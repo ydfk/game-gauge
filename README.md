@@ -44,17 +44,17 @@ FPS 依赖 Intel PresentMon Shared Service。当前工程不会在启动时静�
 `GameGauge.Diagnostics.exe --presentmon-probe <游戏 PID> --sample-ms 10000` 可检查原始帧与有效帧数量。
 游戏 PID 可先通过 `GameGauge.Diagnostics.exe --targets` 查找。
 
-源码构建额外生成 `GameGauge.CpuProbe.exe`，用于验证原生 CPU 温度路径。研究用 PawnIO 模块不在仓库和便携包内；从 [PawnIO.Modules 官方 0.2.11 发行版](https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11)取得 `AMDFamily17.bin` 后放到 `.deps/AMDFamily17-0.2.11.bin`。探针内置官方模块 SHA-256 校验，只读取 SMN 温度寄存器。在管理员 PowerShell 中运行：
+`GameGauge.CpuProbe.exe` 已随便携包提供。PawnIO 驱动需单独安装，官方 AMD 模块不在仓库和便携包内；从 [PawnIO.Modules 官方 0.2.11 发行版](https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11)取得 `AMDFamily17.bin`，在项目根目录或便携包目录的 `.deps` 文件夹中命名为 `AMDFamily17-0.2.11.bin`。设置页“设备与游戏 → 启动温度采集”会请求管理员权限，启动独立传感器进程；主程序仍以普通权限运行。传感器每秒读取一次 AMD Tctl，主程序只读取该进程发布的温度，退出主程序后传感器自动退出。探针内置官方模块 SHA-256 校验，只读取 SMN 温度寄存器。单次诊断命令：
 
 ```powershell
 ./build/core/bin/Release/GameGauge.CpuProbe.exe ./.deps/AMDFamily17-0.2.11.bin
 ```
 
-本机一次读数为 Ryzen 9 9950X3D `Tctl=65.75°C`；普通权限连接 PawnIO 被拒绝。该探针不代表常驻采样或其他 CPU 型号已经完成，详见 [实机验收记录](docs/validation.md)。
+本机一次性探针读数为 Ryzen 9 9950X3D `Tctl=65.75°C`；普通权限连接 PawnIO 被拒绝。独立管理员进程启动后，普通权限主程序已连续读到约 `66.875 → 67°C` 的 Tctl。其他 CPU 型号和长时间稳定性尚未验证，详见 [实机验收记录](docs/validation.md)。
 
 ## 当前限制
 
-- CPU 真实温度已经由独立原生探针在本机读到一次 Tctl，但尚未接入常驻宿主。本机 PresentMon 2.6.0 的能力目录将 `cpu_temperature` 标为 `not_implemented_by_presentmon`；宿主仍显示“—”，不会把 ACPI 热区温度冒充 CPU 温度。
+- CPU 温度已通过隔离的原生传感器进程接入宿主，在本机短时实测有效；用户需单独安装 PawnIO、放置官方模块并在设置中启动。长时间稳定性、温度对照与跨型号支持仍待验收。本机 PresentMon 2.6.0 的能力目录将 `cpu_temperature` 标为 `not_implemented_by_presentmon`；不会把 ACPI 热区温度冒充 CPU 温度。
 - 当前机器的 PresentMon 服务已在《控制：共振》取得真实有效帧；内置隐藏 DX11 测试窗口没有可读帧。1%/0.1% Low 的游戏内精度、跨游戏兼容性仍待验收。
 - 用户已确认无边框与全屏模式下玩家屏幕可见 HUD，OBS 游戏采集录屏中无 HUD；本项目尚未独立检查录制文件画面。OBS 窗口/显示器采集、受保护游戏与反作弊环境仍待验收。
 - 设置页已可鼠标与基本键盘操作，读屏支持、较小屏幕适配、每游戏配置、安装包和长期稳定性测试仍待完成。

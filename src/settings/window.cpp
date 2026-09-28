@@ -3,6 +3,7 @@
 #include "host/ipc_server.h"
 #include <windowsx.h>
 #include <wincodec.h>
+#include <shellapi.h>
 #include <algorithm>
 #include <format>
 #include <stdexcept>
@@ -19,18 +20,36 @@ const auto mint = D2D1::ColorF(0x6BE3C3);
 const auto blue = D2D1::ColorF(0x71B8FA);
 const auto amber = D2D1::ColorF(0xFFB75E);
 void check(HRESULT hr) { if (FAILED(hr)) throw std::runtime_error("设置窗口图形初始化失败：" + std::to_string(hr)); }
+RECT monitor_work(HMONITOR monitor) {
+    MONITORINFO info{sizeof(info)};
+    GetMonitorInfoW(monitor, &info);
+    return info.rcWork;
+}
+float ui_scale(UINT dpi, const RECT& work) {
+    const float width = static_cast<float>(work.right - work.left - 48) / 1180;
+    const float height = static_cast<float>(work.bottom - work.top - 48) / 810;
+    return std::max(.75f, std::min({dpi / 96.f, 1.4f, width, height}));
+}
 }
 SettingsWindow::SettingsWindow(HINSTANCE instance) : instance_(instance) {
     WNDCLASSEXW cls{sizeof(cls)};
     cls.hInstance = instance; cls.lpfnWndProc = procedure; cls.lpszClassName = L"GameGauge.Settings";
     cls.hCursor = LoadCursorW(nullptr, IDC_ARROW); RegisterClassExW(&cls);
-    RECT work{}; SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
-    const auto dpi = GetDpiForSystem();
-    const int window_width = std::min(MulDiv(1180, dpi, 96), static_cast<int>(work.right - work.left - 64));
-    const int window_height = std::min(MulDiv(810, dpi, 96), static_cast<int>(work.bottom - work.top - 64));
+    POINT cursor{}; GetCursorPos(&cursor);
+    const auto work = monitor_work(MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY));
+    const auto initial_scale = ui_scale(GetDpiForSystem(), work);
+    const int window_width = static_cast<int>(1180 * initial_scale);
+    const int window_height = static_cast<int>(810 * initial_scale);
     window_ = CreateWindowExW(0, cls.lpszClassName, L"游戏仪表 · 设置", WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, window_width, window_height, nullptr, nullptr, instance, this);
+        work.left + (work.right - work.left - window_width) / 2,
+        work.top + (work.bottom - work.top - window_height) / 2,
+        window_width, window_height, nullptr, nullptr, instance, this);
     if (!window_) throw std::runtime_error(error_text(GetLastError()));
+    const auto scale = ui_scale(GetDpiForWindow(window_), work);
+    const int final_width = static_cast<int>(1180 * scale), final_height = static_cast<int>(810 * scale);
+    SetWindowPos(window_, nullptr, work.left + (work.right - work.left - final_width) / 2,
+        work.top + (work.bottom - work.top - final_height) / 2, final_width, final_height,
+        SWP_NOZORDER | SWP_NOACTIVATE);
     const D2D1_FACTORY_OPTIONS options{};
     check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), &options,
         reinterpret_cast<void**>(factory_.GetAddressOf())));
@@ -76,11 +95,36 @@ void SettingsWindow::command(const char* action) {
     try { ipc_request({{"command", action}}); refresh(); }
     catch (const std::exception& e) { error_ = e.what(); InvalidateRect(window_, nullptr, FALSE); }
 }
+void SettingsWindow::start_cpu_sensor() {
+    try {
+        const auto host_pid = status_.at("host_pid").get<DWORD>();
+        const auto probe = executable_dir() / L"GameGauge.CpuProbe.exe";
+        if (!std::filesystem::is_regular_file(probe))
+            throw std::runtime_error("当前构建没有 CPU 温度探针");
+        auto folder = executable_dir();
+        std::filesystem::path module;
+        for (int i = 0; i < 6; ++i, folder = folder.parent_path()) {
+            auto candidate = folder / L".deps/AMDFamily17-0.2.11.bin";
+            if (std::filesystem::is_regular_file(candidate)) { module = std::move(candidate); break; }
+            if (folder == folder.parent_path()) break;
+        }
+        if (module.empty()) throw std::runtime_error("缺少已校验的 PawnIO 官方 AMD 模块");
+        const auto parameters = std::format(L"--serve \"{}\" {}", module.wstring(), host_pid);
+        const auto result = ShellExecuteW(window_, L"runas", probe.c_str(), parameters.c_str(), nullptr, SW_HIDE);
+        if (reinterpret_cast<INT_PTR>(result) <= 32)
+            throw std::runtime_error("无法启动管理员 CPU 温度采集，Windows 错误 " +
+                std::to_string(reinterpret_cast<INT_PTR>(result)));
+        error_.clear();
+    } catch (const std::exception& e) { error_ = e.what(); }
+    InvalidateRect(window_, nullptr, FALSE);
+}
 void SettingsWindow::recreate_target() {
     RECT client{}; GetClientRect(window_, &client);
     const auto size = D2D1::SizeU(std::max(1L, client.right), std::max(1L, client.bottom));
     check(factory_->CreateHwndRenderTarget(D2D1::RenderTargetProperties(),
         D2D1::HwndRenderTargetProperties(window_, size, D2D1_PRESENT_OPTIONS_NONE), &hwnd_target_));
+    // HWND 渲染目标默认已使用显示器 DPI；界面变换会再缩放一次，必须统一到 96 DPI。
+    hwnd_target_->SetDpi(96.f, 96.f);
     target_ = hwnd_target_;
 }
 void SettingsWindow::render_to_png(const std::wstring& path, int page) {
@@ -191,7 +235,7 @@ void SettingsWindow::navigation(float width, float height) {
 void SettingsWindow::paint() {
     if (!target_) recreate_target();
     RECT client{}; GetClientRect(window_, &client);
-    scale_ = GetDpiForWindow(window_) / 96.f;
+    scale_ = ui_scale(GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
     const float width = client.right / scale_, height = client.bottom / scale_;
     hotspots_.clear();
     target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
@@ -238,18 +282,24 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
         switch (message) {
         case WM_GETMINMAXINFO: {
             auto info = reinterpret_cast<MINMAXINFO*>(lparam);
-            const auto dpi = window_ ? GetDpiForWindow(window_) : GetDpiForSystem();
-            info->ptMinTrackSize = POINT{MulDiv(950, dpi, 96), MulDiv(720, dpi, 96)}; return 0;
+            const auto work = monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTOPRIMARY));
+            const auto scale = ui_scale(GetDpiForWindow(window_), work);
+            info->ptMinTrackSize = POINT{static_cast<LONG>(950 * scale), static_cast<LONG>(720 * scale)}; return 0;
         }
         case WM_SIZE:
             if (hwnd_target_) hwnd_target_->Resize(D2D1::SizeU(std::max(1u, static_cast<unsigned>(LOWORD(lparam))),
                 std::max(1u, static_cast<unsigned>(HIWORD(lparam)))));
             InvalidateRect(window_, nullptr, FALSE); return 0;
-        case WM_DPICHANGED:
-            SetWindowPos(window_, nullptr, reinterpret_cast<RECT*>(lparam)->left, reinterpret_cast<RECT*>(lparam)->top,
-                reinterpret_cast<RECT*>(lparam)->right - reinterpret_cast<RECT*>(lparam)->left,
-                reinterpret_cast<RECT*>(lparam)->bottom - reinterpret_cast<RECT*>(lparam)->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        case WM_DPICHANGED: {
+            const auto suggested = *reinterpret_cast<RECT*>(lparam);
+            const auto work = monitor_work(MonitorFromRect(&suggested, MONITOR_DEFAULTTONEAREST));
+            const auto scale = ui_scale(HIWORD(wparam), work);
+            const int width = static_cast<int>(1180 * scale), height = static_cast<int>(810 * scale);
+            const int x = std::clamp(suggested.left, work.left, work.right - width);
+            const int y = std::clamp(suggested.top, work.top, work.bottom - height);
+            SetWindowPos(window_, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
             InvalidateRect(window_, nullptr, FALSE); return 0;
+        }
         case WM_TIMER: refresh(); return 0;
         case WM_KEYDOWN:
             if (wparam == VK_TAB && !hotspots_.empty()) {

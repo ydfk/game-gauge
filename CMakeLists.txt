@@ -14,7 +14,7 @@ add_library(gauge_common STATIC
 target_include_directories(gauge_common PUBLIC src third_party)
 target_link_libraries(gauge_common PUBLIC shell32 advapi32)
 add_library(gauge_metrics STATIC
-  src/metrics/hardware.cpp src/metrics/nvidia.cpp src/metrics/presentmon.cpp
+  src/metrics/cpu_temperature.cpp src/metrics/hardware.cpp src/metrics/nvidia.cpp src/metrics/presentmon.cpp
   src/metrics/sampler.cpp src/metrics/target.cpp)
 target_include_directories(gauge_metrics PRIVATE third_party/presentmon)
 target_link_libraries(gauge_metrics PUBLIC gauge_common dxgi pdh psapi powrprof dwmapi)
@@ -26,6 +26,7 @@ target_link_options(GameGauge PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.Diagnostics src/diagnostics/main.cpp src/host/ipc_server.cpp)
 target_link_libraries(GameGauge.Diagnostics PRIVATE gauge_metrics)
 add_executable(GameGauge.CpuProbe src/diagnostics/cpu_temperature_probe.cpp)
+target_include_directories(GameGauge.CpuProbe PRIVATE src)
 target_link_libraries(GameGauge.CpuProbe PRIVATE bcrypt advapi32)
 add_executable(GameGauge.Settings WIN32
   src/settings/main.cpp src/settings/window.cpp src/settings/pages.cpp src/host/ipc_server.cpp)

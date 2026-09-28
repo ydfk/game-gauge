@@ -5,7 +5,7 @@ $taskPackage = Join-Path $taskRoot ('build/package/.staging-' + [guid]::NewGuid(
 $taskZip = Join-Path $taskRoot 'build/package/GameGauge-0.1.0-win-x64.zip'
 
 New-Item -ItemType Directory -Path $taskPackage -Force | Out-Null
-foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe')) {
+foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe', 'GameGauge.CpuProbe.exe')) {
     $taskSource = Join-Path $taskBin $taskName
     if (!(Test-Path -LiteralPath $taskSource)) { throw "缺少 Release 构建产物：$taskName" }
     Copy-Item -LiteralPath $taskSource -Destination (Join-Path $taskPackage $taskName) -Force
@@ -25,7 +25,7 @@ Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/nlohmann/LICENSE.MIT') 
 Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/presentmon/LICENSE.txt') -Destination (Join-Path $taskPackage 'licenses/PresentMon-SDK-MIT.txt') -Force
 
 $taskManifest = [ordered]@{version='0.1.0';platform='Windows 11 x64';presentmon_service='separate signed Intel installation';files=@()}
-foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe')) {
+foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe', 'GameGauge.CpuProbe.exe')) {
     $taskFile = Join-Path $taskPackage $taskName
     $taskManifest.files += [ordered]@{name=$taskName;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $taskFile).Hash;bytes=(Get-Item $taskFile).Length}
 }

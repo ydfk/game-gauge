@@ -1,4 +1,5 @@
 #include <windows.h>
+#include "common/cpu_telemetry.h"
 #include <bcrypt.h>
 #include <intrin.h>
 #include <array>
@@ -126,20 +127,65 @@ unsigned long long read_temperature_register(const std::vector<unsigned char>& b
         } catch (...) { close(handle); throw; }
     } catch (...) { FreeLibrary(library); throw; }
 }
+double tctl_celsius(unsigned long long raw) {
+    const auto value = static_cast<unsigned>(raw);
+    if (value == 0 || value == 0xffffffff) throw std::runtime_error("温度寄存器返回无效原始值");
+    double celsius = static_cast<double>(value >> 21) * 0.125;
+    if ((value & 0x80000) || (value & 0x30000) == 0x30000) celsius -= 49.0;
+    if (celsius < 0 || celsius > 130) throw std::runtime_error("温度原始值超出合理范围");
+    return celsius;
+}
+void serve(const std::vector<unsigned char>& blob, DWORD host_pid) {
+    HANDLE host = OpenProcess(SYNCHRONIZE, FALSE, host_pid);
+    if (!host) throw std::runtime_error("无法绑定 GameGauge 宿主进程");
+    HANDLE mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
+        sizeof(gauge::CpuTelemetryRecord), gauge::cpu_telemetry_name);
+    if (!mapping || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (mapping) CloseHandle(mapping);
+        CloseHandle(host);
+        throw std::runtime_error("CPU 温度采集已运行或无法创建共享数据");
+    }
+    auto* shared = static_cast<gauge::CpuTelemetryRecord*>(MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0,
+        sizeof(gauge::CpuTelemetryRecord)));
+    if (!shared) { CloseHandle(mapping); CloseHandle(host); throw std::runtime_error("无法映射 CPU 温度数据"); }
+    shared->magic = gauge::cpu_telemetry_magic;
+    shared->process_id = GetCurrentProcessId();
+    while (WaitForSingleObject(host, 0) == WAIT_TIMEOUT) {
+        double value{};
+        DWORD valid{};
+        try { value = tctl_celsius(read_temperature_register(blob)); valid = 1; }
+        catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
+        InterlockedIncrement(&shared->sequence);
+        MemoryBarrier();
+        shared->timestamp_ms = GetTickCount64();
+        shared->tctl_celsius = value;
+        shared->valid = valid;
+        MemoryBarrier();
+        InterlockedIncrement(&shared->sequence);
+        if (WaitForSingleObject(host, 1000) != WAIT_TIMEOUT) break;
+    }
+    UnmapViewOfFile(shared);
+    CloseHandle(mapping);
+    CloseHandle(host);
+}
 }
 
 int wmain(int argc, wchar_t** argv) {
     SetConsoleOutputCP(CP_UTF8);
     try {
-        if (argc != 2) throw std::runtime_error("用法：GameGauge.CpuProbe.exe <官方 AMDFamily17-0.2.11.bin 路径>");
+        if (argc != 2 && (argc != 4 || std::wstring_view(argv[1]) != L"--serve"))
+            throw std::runtime_error("用法：GameGauge.CpuProbe.exe [--serve <模块路径> <宿主 PID>] <官方模块路径>");
         const auto id = cpu_id();
-        const auto blob = verified_module(argv[1]);
+        const auto blob = verified_module(argv[argc == 2 ? 1 : 2]);
+        if (argc == 4) {
+            const auto pid = std::stoul(argv[3]);
+            if (!pid) throw std::runtime_error("宿主 PID 无效");
+            serve(blob, static_cast<DWORD>(pid));
+            return 0;
+        }
         const auto raw = read_temperature_register(blob);
         const auto value = static_cast<unsigned>(raw);
-        if (value == 0 || value == 0xffffffff) throw std::runtime_error("温度寄存器返回无效原始值");
-        double celsius = static_cast<double>(value >> 21) * 0.125;
-        if ((value & 0x80000) || (value & 0x30000) == 0x30000) celsius -= 49.0;
-        if (celsius < 0 || celsius > 130) throw std::runtime_error("温度原始值超出合理范围");
+        const double celsius = tctl_celsius(raw);
         std::cout << "{\"family\":" << id.family << ",\"model\":" << id.model
                   << ",\"register\":\"0x" << std::hex << value << std::dec
                   << "\",\"tctl_celsius\":" << celsius

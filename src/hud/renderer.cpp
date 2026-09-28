@@ -97,12 +97,12 @@ float Renderer::text_width(const std::wstring& text) {
 }
 SIZE Renderer::measure(const Snapshot& s, const Config& config, UINT dpi) {
     prepare_format(static_cast<float>(config.font_size));
-    float width = 22;
+    float width = 12;
     for (const auto& item : hud_items(s, config)) {
-        width += item.label.empty() ? 4 : text_width(item.label) + 9;
-        width += std::max(text_width(item.value), static_cast<float>(config.font_size * 2.6)) + 16;
+        if (!item.label.empty()) width += text_width(item.label) + 3;
+        width += std::max(text_width(item.value), static_cast<float>(config.font_size * 1.9)) + 7;
     }
-    const float height = static_cast<float>(config.font_size * 1.65 + 8 + (config.graph ? 40 : 0));
+    const float height = static_cast<float>(config.font_size * 1.5 + 6 + (config.graph ? 40 : 0));
     return {static_cast<LONG>(std::ceil(width * dpi / 96)), static_cast<LONG>(std::ceil(height * dpi / 96))};
 }
 void Renderer::resize(UINT width, UINT height) {
@@ -125,24 +125,24 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     check(context_->CreateSolidColorBrush(D2D1::ColorF(.025f, .035f, .05f, static_cast<float>(config.opacity)), &brush));
     context_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3, 3), brush.Get());
-    float x = 11;
-    const float text_bottom = static_cast<float>(config.font_size * 1.65 + 8);
+    float x = 6;
+    const float text_bottom = static_cast<float>(config.font_size * 1.5 + 6);
     for (const auto& item : hud_items(s, config)) {
         if (!item.label.empty()) {
             brush->SetColor(D2D1::ColorF(.88f, .9f, .94f));
             const float w = text_width(item.label);
-            context_->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), format_.Get(), D2D1::RectF(x, 5, x + w + 2, text_bottom), brush.Get());
-            x += w + 9;
-        } else x += 4;
+            context_->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), format_.Get(), D2D1::RectF(x, 3, x + w + 2, text_bottom), brush.Get());
+            x += w + 3;
+        }
         brush->SetColor(item.color);
-        const float w = std::max(text_width(item.value), static_cast<float>(config.font_size * 2.6));
-        context_->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format_.Get(), D2D1::RectF(x, 5, x + w + 2, text_bottom), brush.Get());
-        x += w + 16;
+        const float w = std::max(text_width(item.value), static_cast<float>(config.font_size * 1.9));
+        context_->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format_.Get(), D2D1::RectF(x, 3, x + w + 2, text_bottom), brush.Get());
+        x += w + 7;
     }
     if (config.graph && s.recent_frames.size() > 1) {
         brush->SetColor(D2D1::ColorF(.34f, .76f, 1.f));
-        const float spacing = (width - 22) / static_cast<float>(s.recent_frames.size() - 1);
-        auto point = [&](size_t i) { return D2D1::Point2F(11 + spacing * i, height - 5 - static_cast<float>(std::min(s.recent_frames[i], 50.0) / 50 * 32)); };
+        const float spacing = (width - 12) / static_cast<float>(s.recent_frames.size() - 1);
+        auto point = [&](size_t i) { return D2D1::Point2F(6 + spacing * i, height - 5 - static_cast<float>(std::min(s.recent_frames[i], 50.0) / 50 * 32)); };
         for (size_t i = 1; i < s.recent_frames.size(); ++i) context_->DrawLine(point(i - 1), point(i), brush.Get(), 1.2f);
     }
     check(context_->EndDraw()); check(swap_->Present(1, 0));

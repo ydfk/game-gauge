@@ -107,7 +107,7 @@ Json Application::request(const Json& command) {
     const auto action = command.value("command", std::string("status"));
     if (action == "status") {
         std::lock_guard lock(mutex_);
-        return {{"ok", true}, {"version", 1}, {"config", config_json(config_)}, {"snapshot", snapshot_json(sampler_.snapshot())},
+        return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(sampler_.snapshot())},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
             {"warning", warning_}, {"hud_error", hud_error_}};
     }

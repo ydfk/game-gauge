@@ -177,8 +177,14 @@ void SettingsWindow::hardware(float width) {
     const auto snapshot = status_.value("snapshot", Json::object());
     fill(D2D1::RectF(left, 148, right, 214), panel, 12);
     label(L"CPU", left + 18, 163, 68, 22, small_.Get(), mint);
-    label(text_field(snapshot, "cpu"), left + 90, 159, span - 108, 30, heading_.Get(), white);
-    label(L"自动识别 · 不绑定个人硬件型号", left + 90, 186, span - 110, 18, small_.Get(), muted);
+    label(text_field(snapshot, "cpu"), left + 90, 159, span - 290, 30, heading_.Get(), white);
+    const auto cpu_temperature = snapshot.value("cpu_temperature", Json::object());
+    const bool cpu_live = cpu_temperature.value("state", std::string{}) == "valid";
+    label(cpu_live ? L"Tctl " + reading(cpu_temperature, L"°C") + L" · PawnIO 原生采集" :
+        L"Tctl 暂不可用 · 可启动独立传感器", left + 90, 186, span - 290, 18,
+        small_.Get(), cpu_live ? mint : muted);
+    if (!cpu_live) button(L"启动温度采集", D2D1::RectF(right - 164, 163, right - 14, 200),
+        [this](float) { start_cpu_sensor(); });
     label(L"用于监控的显卡", left, 232, 280, 28, heading_.Get(), white);
     button(L"自动选择", D2D1::RectF(right - 154, 228, right, 265), [this](float) { config_.gpu_id.clear(); apply(); }, config_.gpu_id.empty());
     float y = 275;

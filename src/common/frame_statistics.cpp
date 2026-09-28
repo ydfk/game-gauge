@@ -26,6 +26,9 @@ void FrameStatistics::publish(Snapshot& s, uint64_t now) {
     std::unordered_map<uint64_t, size_t> counts;
     for (const auto& frame : frames_) if (now >= frame.timestamp_ms && now - frame.timestamp_ms <= 1000) ++counts[frame.chain];
     if (counts.empty()) {
+        // PresentMon 偶尔延迟交付一批帧；短暂空窗沿用最近一次读数，超过两秒再标记等待。
+        if (!frames_.empty() && now >= frames_.back().timestamp_ms &&
+            now - frames_.back().timestamp_ms <= 2000 && s.fps.state == State::valid) return;
         s.fps = missing(State::waiting, "等待目标游戏的帧事件", "PresentMon");
         s.frametime = s.fps;
         s.low1 = s.low01 = missing(State::waiting, "样本不足", "GameGauge 慢帧均值");

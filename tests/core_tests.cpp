@@ -21,6 +21,11 @@ int main() {
         close(*snapshot.fps.value, 100, "secondary swap chain must not inflate FPS");
         close(*snapshot.low1.value, 100, "stable frame stream low must match FPS");
         require(!snapshot.low01.value && snapshot.low01.state == gauge::State::waiting, "0.1% requires enough samples");
+        statistics.publish(snapshot, 3200);
+        close(*snapshot.fps.value, 100, "short frame delivery gaps must keep the last FPS");
+        statistics.publish(snapshot, 4201);
+        require(!snapshot.fps.value && snapshot.fps.state == gauge::State::waiting,
+            "FPS must become unavailable after the frame stream stops");
         statistics.publish(snapshot, 64000);
         require(!snapshot.fps.value, "old frame data must not remain live");
         statistics.reset();

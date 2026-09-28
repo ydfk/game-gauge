@@ -35,7 +35,14 @@
 - 从 [PawnIO.Modules 官方 0.2.11 发行版](https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11)取得 `release_0_2_11.zip`，校验发行资产 SHA-256 为 `43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4`；其中 `AMDFamily17.bin` 的 SHA-256 为 `dae74615761b78bdf064dfb3e136252ddcc6fc727d88f14738d0e5800d427a91`。模块留在 Git 忽略的 `.deps`，不进入便携包。
 - `GameGauge.CpuProbe.exe` 限定上述模块哈希，仅调用 PawnIO 的 `ioctl_read_smn` 读取 SMN `0x59800`，并按 [Linux k10temp 驱动](https://github.com/torvalds/linux/blob/master/drivers/hwmon/k10temp.c)的温度位与 49°C 修正规则解码。此探针是单次技术验证程序，尚未作为宿主的长期采样后端。
 - 普通权限连接已运行的 PawnIO 驱动返回 `HRESULT=0x80070005`（拒绝访问）；管理员 PowerShell 中运行成功，本机 CPU family/model 为 `0x1A/0x44`，寄存器原始值 `0x72db0000`，得到 `Tctl=65.75°C`。这是本机单次有效读数；还需与独立传感器软件在相同时间段对照，并验证持续采样、权限隔离、其他 CPU 型号和发行许可。
-- `GameGauge.CpuProbe.exe` 仅随源码构建生成。运行命令：`./build/core/bin/Release/GameGauge.CpuProbe.exe ./.deps/AMDFamily17-0.2.11.bin`（管理员 PowerShell）。正式产品不应为了温度让整个 HUD/设置进程提权，后续应通过受限的独立传感器进程提供读数。
+- 单次探针运行命令：`./build/core/bin/Release/GameGauge.CpuProbe.exe ./.deps/AMDFamily17-0.2.11.bin`（管理员 PowerShell）。这一轮先验证了原生读数；后续代码接入见下节。
+
+## 2026-09-28 HUD、DPI 与温度进程修复
+
+- HUD 默认上边距改为 0；旧配置里的默认 `8` 也按贴顶处理。指标标签和值的水平间距及背景高度缩小。真实游戏中的贴顶视觉效果仍待复验。
+- 帧统计对短于 2 秒的 PresentMon 交付空窗保留最近有效 FPS；超过 2 秒仍显示不可用，避免停帧时长期显示过期数值。新增核心测试覆盖这两个时段；真实游戏 FPS 抖动是否完全消失仍待复验。
+- 设置窗口按当前屏幕工作区限制 UI 缩放，并在所在显示器居中。首次离屏快照正常，但用户实机截图仍被裁切；查明 HWND Direct2D 渲染目标默认 DPI 与手动变换叠加。将 HWND 目标设为 96 DPI 后，捕获真实窗口图片显示设备页全部主要控件，向导航发送对应物理坐标点击可切换到设备页。用户鼠标手动复验仍待反馈。
+- 新增独立管理员传感器进程，以同会话共享数据每秒发布 AMD Tctl，宿主普通权限读取；设置页提供启动入口。模块仍需用户从官方发行版单独取得并通过探针哈希校验，未随包分发。本机运行约两秒期间连续取得 `66.875 → 67°C`、状态 `valid`、来源 `PawnIO · AMD Tctl (SMN 0x59800)`；长期稳定性和独立温度来源对照仍未完成。
 
 还应测试 Alt+Tab、游戏分辨率变更、HDR 切换、睡眠恢复、Explorer 重启、游戏退出后的悬浮条和托盘状态。每次仅保留必要的录制文件用于本地核验；导出的诊断 JSON 可能包含游戏可执行路径，公开分享前先检查。
 

@@ -75,10 +75,9 @@ struct Config {
     double font_size{14};
     double opacity{0.86};
     int anchor{};
-    int margin_x{12}, margin_y{8};
+    int margin_x{12}, margin_y{};
     std::string gpu_id;
     std::vector<std::string> metrics{"fps", "cpu_temperature", "cpu_load", "gpu_temperature", "gpu_load", "vram", "memory_load", "session"};
     std::vector<std::string> ignored_processes;
 };
 }
-

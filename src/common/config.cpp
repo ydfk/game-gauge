@@ -35,7 +35,7 @@ Config config_from_json(const Json& json) {
     config.opacity = std::clamp(config.opacity, 0.1, 1.0);
     config.anchor = std::clamp(json.value("anchor", 0), 0, 3);
     config.margin_x = std::clamp(json.value("margin_x", 12), 0, 2000);
-    config.margin_y = std::clamp(json.value("margin_y", 8), 0, 2000);
+    config.margin_y = std::clamp(json.value("margin_y", 0), 0, 2000);
     config.gpu_id = json.value("gpu_id", std::string{});
     if (json.contains("metrics")) {
         config.metrics.clear();

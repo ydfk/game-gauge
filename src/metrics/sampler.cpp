@@ -1,5 +1,6 @@
 #include "sampler.h"
 #include "hardware.h"
+#include "cpu_temperature.h"
 #include "nvidia.h"
 #include "presentmon.h"
 #include "target.h"
@@ -149,7 +150,7 @@ void Sampler::run(std::stop_token stop) {
             statistics.reset();
         }
         current.timestamp_ms = GetTickCount64(); current.paused = config.paused;
-        current.cpu_temperature = missing(State::unsupported, "原生 CPU 温度组件尚未可用；未读取 ACPI 热区冒充 CPU", "能力检测");
+        current.cpu_temperature = sample_cpu_temperature(current.hardware);
         if (!config.paused) {
             if (current.timestamp_ms - last_hardware >= 1000) {
                 counters.sample(current, config); nvidia.sample(current.hardware); last_hardware = current.timestamp_ms;

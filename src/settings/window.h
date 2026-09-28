@@ -24,6 +24,7 @@ private:
     void refresh();
     void apply();
     void command(const char* action);
+    void start_cpu_sensor();
     void paint();
     void recreate_target();
     void fill(D2D1_RECT_F rect, D2D1_COLOR_F color, float radius = 0);

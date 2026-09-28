@@ -63,7 +63,9 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         auto size = renderer_->measure(snapshot, config, dpi);
         // 初版以窗口边界裁剪，保证长条不会越到另一块屏幕。
         size.cx = std::min(size.cx, bounds.right - bounds.left);
-        const int x_margin = MulDiv(config.margin_x, dpi, 96), y_margin = MulDiv(config.margin_y, dpi, 96);
+        // 旧版本把 8 像素写入默认配置；将该默认值视作贴顶。
+        const int x_margin = MulDiv(config.margin_x, dpi, 96);
+        const int y_margin = MulDiv(config.margin_y == 8 ? 0 : config.margin_y, dpi, 96);
         int x = bounds.left + (bounds.right - bounds.left - size.cx) / 2;
         if (config.anchor == 1) x = bounds.left + x_margin;
         else if (config.anchor == 2) x = bounds.right - size.cx - x_margin;
