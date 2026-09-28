@@ -1,0 +1,53 @@
+#include "common/config.h"
+#include "common/platform.h"
+#include "metrics/sampler.h"
+#include "metrics/target.h"
+#include "metrics/presentmon.h"
+#include "metrics/hardware.h"
+#include "host/ipc_server.h"
+#include <iostream>
+#include <thread>
+
+int wmain(int argc, wchar_t** argv) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    try {
+        gauge::Config config;
+        unsigned duration = 2500;
+        uint32_t presentmon_pid{};
+        for (int i = 1; i < argc; ++i) {
+            std::wstring argument = argv[i];
+            if (argument == L"--data-dir" && i + 1 < argc) gauge::set_data_dir(argv[++i]);
+            else if (argument == L"--target-pid" && i + 1 < argc) {
+                config.auto_target = false; config.hide_on_blur = false; config.target_pid = std::stoul(argv[++i]);
+            }
+            else if (argument == L"--sample-ms" && i + 1 < argc) duration = std::clamp(std::stoul(argv[++i]), 1000ul, 60000ul);
+            else if (argument == L"--presentmon-probe" && i + 1 < argc) presentmon_pid = std::stoul(argv[++i]);
+            else if (argument == L"--host-status") { std::cout << gauge::ipc_request({{"command", "status"}}).dump(2) << '\n'; return 0; }
+            else if (argument == L"--request" && i + 1 < argc) { std::cout << gauge::ipc_request(gauge::Json::parse(gauge::utf8(argv[++i]))).dump(2) << '\n'; return 0; }
+            else if (argument == L"--targets") {
+                gauge::Json targets = gauge::Json::array();
+                for (const auto& target : gauge::enumerate_targets()) targets.push_back({{"pid", target.pid}, {"name", target.name}});
+                std::cout << targets.dump(2) << '\n'; return 0;
+            }
+        }
+        if (presentmon_pid) {
+            gauge::Target target; target.pid = presentmon_pid;
+            gauge::Snapshot snapshot; snapshot.hardware = gauge::discover_hardware();
+            gauge::FrameStatistics statistics; gauge::PresentMonProvider provider;
+            const auto until = GetTickCount64() + duration;
+            do {
+                provider.poll(target, snapshot, statistics);
+                statistics.publish(snapshot, GetTickCount64());
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            } while (GetTickCount64() < until);
+            std::cout << gauge::Json{{"frame_status", provider.status()}, {"fps", gauge::snapshot_json(snapshot)["fps"]},
+                {"frame_samples", snapshot.frame_samples}, {"cpu_temperature", gauge::snapshot_json(snapshot)["cpu_temperature"]}}.dump(2) << '\n';
+            return 0;
+        }
+        gauge::Sampler sampler(config);
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration));
+        auto snapshot = sampler.snapshot();
+        std::cout << gauge::snapshot_json(snapshot).dump(2) << '\n';
+        return snapshot.hardware.cpu.empty() ? 1 : 0;
+    } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
+}

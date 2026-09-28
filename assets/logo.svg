@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="游戏仪表 GameGauge">
+  <rect x="5" y="5" width="118" height="118" rx="27" fill="#101a27"/>
+  <g fill="none" stroke="#6be3c3" stroke-width="8" stroke-linecap="round">
+    <path d="M22 72a44 44 0 0 1 15-34"/>
+    <path d="M46 31a44 44 0 0 1 37-2"/>
+    <path d="M93 35a44 44 0 0 1 16 35"/>
+    <path d="M21 88l17-13 12 11 17-15" stroke-linejoin="round"/>
+  </g>
+  <path d="M68 69l35-32-23 41z" fill="#6be3c3"/>
+  <circle cx="68" cy="70" r="7" fill="#101a27" stroke="#6be3c3" stroke-width="7"/>
+  <circle cx="105" cy="87" r="5" fill="#ffb75e"/>
+</svg>
