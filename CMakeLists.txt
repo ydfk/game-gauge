@@ -25,6 +25,8 @@ target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dw
 target_link_options(GameGauge PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.Diagnostics src/diagnostics/main.cpp src/host/ipc_server.cpp)
 target_link_libraries(GameGauge.Diagnostics PRIVATE gauge_metrics)
+add_executable(GameGauge.CpuProbe src/diagnostics/cpu_temperature_probe.cpp)
+target_link_libraries(GameGauge.CpuProbe PRIVATE bcrypt advapi32)
 add_executable(GameGauge.Settings WIN32
   src/settings/main.cpp src/settings/window.cpp src/settings/pages.cpp src/host/ipc_server.cpp)
 target_link_libraries(GameGauge.Settings PRIVATE gauge_common d2d1 dwrite windowscodecs)
@@ -34,5 +36,5 @@ add_executable(GameGauge.Tests tests/core_tests.cpp)
 target_link_libraries(GameGauge.Tests PRIVATE gauge_common)
 enable_testing()
 add_test(NAME core_contracts COMMAND GameGauge.Tests)
-set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.Settings GameGauge.RenderProbe GameGauge.Tests
+set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGauge.Settings GameGauge.RenderProbe GameGauge.Tests
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
