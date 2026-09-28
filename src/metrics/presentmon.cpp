@@ -8,6 +8,29 @@
 #include <cmath>
 
 namespace gauge {
+namespace {
+const char* metric_name(PM_METRIC metric) {
+    switch (metric) {
+    case PM_METRIC_GPU_UTILIZATION: return "gpu_utilization";
+    case PM_METRIC_GPU_TEMPERATURE: return "gpu_temperature";
+    case PM_METRIC_GPU_POWER: return "gpu_power";
+    case PM_METRIC_GPU_FREQUENCY: return "gpu_frequency";
+    case PM_METRIC_GPU_MEM_USED: return "gpu_memory_used";
+    case PM_METRIC_CPU_TEMPERATURE: return "cpu_temperature";
+    default: return "unknown";
+    }
+}
+const char* availability_name(PM_METRIC_AVAILABILITY availability) {
+    switch (availability) {
+    case PM_METRIC_AVAILABILITY_AVAILABLE: return "available";
+    case PM_METRIC_AVAILABILITY_UNAVAILABLE: return "unavailable";
+    case PM_METRIC_AVAILABILITY_NOT_EXPORTED_BY_SOURCE: return "not_exported_by_source";
+    case PM_METRIC_AVAILABILITY_NOT_SUPPORTED_BY_DEVICE: return "not_supported_by_device";
+    case PM_METRIC_AVAILABILITY_NOT_IMPLEMENTED_BY_PRESENTMON: return "not_implemented_by_presentmon";
+    default: return "unknown";
+    }
+}
+}
 struct PresentMonProvider::Impl {
     HMODULE library{};
     PM_SESSION_HANDLE session{};
@@ -19,6 +42,7 @@ struct PresentMonProvider::Impl {
         {PM_METRIC_PRESENT_START_QPC, PM_STAT_NONE}, {PM_METRIC_BETWEEN_PRESENTS, PM_STAT_NONE}};
     struct Telemetry { PM_DYNAMIC_QUERY_HANDLE query{}; PM_QUERY_ELEMENT element{}; PM_DATA_TYPE type{}; std::string device; };
     std::vector<Telemetry> telemetry;
+    std::vector<PresentMonCapability> capability_list;
     decltype(&pmOpenSession) open{};
     decltype(&pmOpenSessionWithPipe) open_with_pipe{};
     decltype(&pmCloseSession) close{};
@@ -40,6 +64,7 @@ struct PresentMonProvider::Impl {
         frames = nullptr;
         for (auto& item : telemetry) if (item.query && free_dynamic) free_dynamic(item.query);
         telemetry.clear();
+        capability_list.clear();
         if (session && close) close(session);
         session = nullptr; pid = 0; started = 0; raw_frames = accepted_frames = 0;
     }
@@ -71,10 +96,12 @@ struct PresentMonProvider::Impl {
         auto result = pipe_length && pipe_length < sizeof(named_pipe) ? open_with_pipe(&session, named_pipe) : open(&session);
         if (result != PM_STATUS_SUCCESS) { session = nullptr; message = "PresentMon 服务不可用，状态 " + std::to_string(result); return false; }
         const PM_INTROSPECTION_ROOT* root{};
-        if (introspect(session, &root) == PM_STATUS_SUCCESS) {
+        if (introspect(session, &root) == PM_STATUS_SUCCESS && root && root->pDevices && root->pMetrics) {
             std::unordered_map<uint32_t, std::string> device_ids;
+            std::unordered_map<uint32_t, std::string> device_names;
             for (size_t i = 0; i < root->pDevices->size; ++i) {
                 auto device = static_cast<const PM_INTROSPECTION_DEVICE*>(root->pDevices->pData[i]);
+                if (device->pName && device->pName->pData) device_names[device->id] = device->pName->pData;
                 if (device->pLuid && device->pLuid->size == sizeof(LUID)) {
                     LUID luid{}; memcpy(&luid, device->pLuid->pData, sizeof(luid));
                     device_ids[device->id] = std::format("{:08x}:{:08x}", static_cast<uint32_t>(luid.HighPart), luid.LowPart);
@@ -87,6 +114,8 @@ struct PresentMonProvider::Impl {
                 if (std::find(wanted.begin(), wanted.end(), metric->id) == wanted.end()) continue;
                 for (size_t d = 0; d < metric->pDeviceMetricInfo->size; ++d) {
                     auto info = static_cast<const PM_INTROSPECTION_DEVICE_METRIC_INFO*>(metric->pDeviceMetricInfo->pData[d]);
+                    capability_list.push_back({metric_name(metric->id), device_names[info->deviceId],
+                        device_ids[info->deviceId], availability_name(info->availability)});
                     if (info->availability != PM_METRIC_AVAILABILITY_AVAILABLE) continue;
                     Telemetry item{};
                     item.element = {metric->id, PM_STAT_AVG, info->deviceId};
@@ -129,8 +158,14 @@ struct PresentMonProvider::Impl {
 PresentMonProvider::PresentMonProvider() : impl_(std::make_unique<Impl>()) {}
 PresentMonProvider::~PresentMonProvider() { impl_->disconnect(); if (impl_->library) FreeLibrary(impl_->library); }
 const std::string& PresentMonProvider::status() const { return impl_->message; }
+uint64_t PresentMonProvider::raw_frame_count() const { return impl_->raw_frames; }
+uint64_t PresentMonProvider::accepted_frame_count() const { return impl_->accepted_frames; }
+std::vector<PresentMonCapability> PresentMonProvider::capabilities() {
+    impl_->connect();
+    return impl_->capability_list;
+}
 void PresentMonProvider::reset() { impl_->disconnect(); impl_->retry_at = 0; }
-void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameStatistics& statistics) {
+void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameStatistics& statistics, bool collect_frames) {
     if (!target.pid) {
         if (impl_->pid) { impl_->disconnect(); statistics.reset(); }
         impl_->message = "等待游戏目标 · 帧采集按需连接";
@@ -150,7 +185,15 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
         result = impl_->register_frames(impl_->session, &impl_->frames, impl_->frame_elements, 3, &impl_->frame_bytes);
         if (result != PM_STATUS_SUCCESS) { impl_->message = "帧查询不支持，状态 " + std::to_string(result); impl_->disconnect(); return; }
     }
-    if (impl_->frame_bytes == 0 || impl_->frame_bytes > 65536) { impl_->disconnect(); return; }
+    const auto valid_element = [this](const PM_QUERY_ELEMENT& element, uint64_t size) {
+        return element.dataSize == size && element.dataOffset <= impl_->frame_bytes &&
+            element.dataSize <= impl_->frame_bytes - element.dataOffset;
+    };
+    if (impl_->frame_bytes == 0 || impl_->frame_bytes > 65536 ||
+        !valid_element(impl_->frame_elements[0], 8) || !valid_element(impl_->frame_elements[1], 8) ||
+        !valid_element(impl_->frame_elements[2], 8)) {
+        impl_->message = "PresentMon 帧查询布局异常"; impl_->disconnect(); return;
+    }
     std::vector<uint8_t> frames(static_cast<size_t>(impl_->frame_bytes) * 1024);
     uint32_t count = 1024;
     const auto result = impl_->consume(impl_->frames, target.pid, frames.data(), &count);
@@ -161,11 +204,12 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
     for (uint32_t i = 0; i < count; ++i) {
         const auto* frame = frames.data() + static_cast<size_t>(i) * impl_->frame_bytes;
         uint64_t chain{}, timestamp{}; double ms{};
-        memcpy(&chain, frame + impl_->frame_elements[0].dataOffset, std::min<uint64_t>(8, impl_->frame_elements[0].dataSize));
-        memcpy(&timestamp, frame + impl_->frame_elements[1].dataOffset, std::min<uint64_t>(8, impl_->frame_elements[1].dataSize));
-        memcpy(&ms, frame + impl_->frame_elements[2].dataOffset, std::min<uint64_t>(8, impl_->frame_elements[2].dataSize));
+        memcpy(&chain, frame + impl_->frame_elements[0].dataOffset, sizeof(chain));
+        memcpy(&timestamp, frame + impl_->frame_elements[1].dataOffset, sizeof(timestamp));
+        memcpy(&ms, frame + impl_->frame_elements[2].dataOffset, sizeof(ms));
         const auto age = timestamp <= static_cast<uint64_t>(qpc.QuadPart) ? (static_cast<uint64_t>(qpc.QuadPart) - timestamp) * 1000 / frequency.QuadPart : 0;
-        if (age < now && age < 60000) { statistics.add(now - age, chain, ms); ++impl_->accepted_frames; }
+        if (collect_frames && std::isfinite(ms) && ms > 0 && timestamp <= static_cast<uint64_t>(qpc.QuadPart) &&
+            age < now && age < 60000) { statistics.add(now - age, chain, ms); ++impl_->accepted_frames; }
     }
     impl_->raw_frames += count;
     impl_->poll_telemetry(snapshot);

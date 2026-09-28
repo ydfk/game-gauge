@@ -130,7 +130,7 @@ void Sampler::run(std::stop_token stop) {
     FrameStatistics statistics;
     SystemCounters counters;
     uint64_t last_hardware{}, last_session = GetTickCount64();
-    bool was_paused{};
+    bool was_paused{}, was_foreground{};
     while (!stop.stop_requested()) {
         Config config; bool reset{}, rediscover{};
         {
@@ -140,8 +140,13 @@ void Sampler::run(std::stop_token stop) {
         if (rediscover) current.hardware = discover_hardware();
         const auto previous = current.target;
         current.target = find_target(config, previous);
-        if (reset || previous.pid != current.target.pid || previous.started != current.target.started || was_paused != config.paused) {
+        const bool target_changed = previous.pid != current.target.pid || previous.started != current.target.started;
+        if (reset || target_changed) {
             statistics.reset(); presentmon.reset(); current.session_seconds = 0;
+        } else if (was_paused != config.paused) {
+            statistics.reset(); presentmon.reset();
+        } else if (was_foreground != current.target.foreground) {
+            statistics.reset();
         }
         current.timestamp_ms = GetTickCount64(); current.paused = config.paused;
         current.cpu_temperature = missing(State::unsupported, "原生 CPU 温度组件尚未可用；未读取 ACPI 热区冒充 CPU", "能力检测");
@@ -150,20 +155,25 @@ void Sampler::run(std::stop_token stop) {
                 counters.sample(current, config); nvidia.sample(current.hardware); last_hardware = current.timestamp_ms;
             }
             const bool active = current.target.pid != 0;
-            presentmon.poll(active ? current.target : Target{}, current, statistics);
+            const bool collecting = active && current.target.foreground;
+            presentmon.poll(active ? current.target : Target{}, current, statistics, collecting);
             statistics.publish(current, current.timestamp_ms);
-            if (active) current.session_seconds += (current.timestamp_ms - last_session) / 1000.0;
+            if (collecting && was_foreground && !was_paused && !target_changed)
+                current.session_seconds += (current.timestamp_ms - last_session) / 1000.0;
             current.frame_status = presentmon.status();
+            if (active && !collecting) current.frame_status += " · 游戏已失焦，统计暂停";
         } else {
             current.frame_status = "采集已暂停";
             current.fps = current.frametime = current.low1 = current.low01 = missing(State::stale, "采集已暂停");
+            current.frame_samples = 0;
+            current.recent_frames.clear();
         }
-        last_session = current.timestamp_ms; was_paused = config.paused;
+        last_session = current.timestamp_ms; was_paused = config.paused; was_foreground = current.target.foreground;
         {
             std::lock_guard lock(mutex_); snapshot_ = current;
         }
         std::unique_lock lock(mutex_);
-        wake_.wait_for(lock, stop, std::chrono::milliseconds(current.target.pid || config.preview ? config.refresh_ms : 1000), [] { return false; });
+        wake_.wait_for(lock, std::chrono::milliseconds(current.target.pid || config.preview ? config.refresh_ms : 1000));
     }
 }
 }

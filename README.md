@@ -7,6 +7,7 @@ Windows 11 游戏内性能监控的原生 C++ 桌面程序。当前处于技术�
 - 托盘菜单、全局快捷键、独立设置窗口和顶部高密度监控条。
 - 自动发现 CPU、GPU、显示器、DPI/HDR；读取 Windows 计数器与可用的 NVIDIA 遥测。
 - PresentMon SDK 帧采集接口、帧时间与低帧统计、会话 JSON 导出。
+- PresentMon 指标能力诊断；游戏失焦或手动暂停时暂停有效会话统计。
 - 请求 Windows 排除窗口捕获，并把“系统接受请求”和“OBS 实际验证”分开显示。
 - 监控内容、顺序、位置、字号、透明度、设备与游戏目标设置。
 
@@ -39,10 +40,13 @@ Windows 11 游戏内性能监控的原生 C++ 桌面程序。当前处于技术�
 `./scripts/smoke-host.ps1` 会在隔离的 `build/runtime-test/smoke` 目录验证宿主启动、连续 IPC、配置提交和持久化。运行前请退出正在使用的游戏仪表，脚本会拒绝触碰已有进程。
 
 FPS 依赖 Intel PresentMon Shared Service。当前工程不会在启动时静默安装系统服务。
+`GameGauge.Diagnostics.exe --presentmon-capabilities` 可列出当前服务逐设备报告的指标能力；
+`GameGauge.Diagnostics.exe --presentmon-probe <游戏 PID> --sample-ms 10000` 可检查原始帧与有效帧数量。
+游戏 PID 可先通过 `GameGauge.Diagnostics.exe --targets` 查找。
 
 ## 当前限制
 
-- CPU 真实温度尚未通过实机验证；当前采集链在服务提供且声明可用时才尝试读取，缺失时显示“—”，不会把 ACPI 热区温度冒充 CPU 温度。
+- CPU 真实温度尚未实现独立原生后端。本机 PresentMon 2.6.0 的能力目录将 `cpu_temperature` 标为 `not_implemented_by_presentmon`；缺失时显示“—”，不会把 ACPI 热区温度冒充 CPU 温度。
 - 当前机器的 PresentMon 服务已运行，但内置 DX11 测试窗口尚未产生可读帧；真实游戏 FPS、1%/0.1% Low 不能视为已验收。
 - Windows 已接受捕获排除请求，但 OBS 窗口采集的录制文件尚未核验。独占全屏、受保护游戏与反作弊环境不在当前验收范围。
 - 设置页已可鼠标与基本键盘操作，读屏支持、较小屏幕适配、每游戏配置、安装包和长期稳定性测试仍待完成。

@@ -253,8 +253,10 @@ void SettingsWindow::capture(float width) {
     fill(D2D1::RectF(left, 360, right, 506), panel, 14);
     label(L"采集状态", left + 22, 378, 190, 26, heading_.Get(), white);
     const auto frame_status = text_field(snapshot, "frame_status");
+    const auto fps = snapshot.value("fps", Json::object());
+    const bool frames_valid = fps.is_object() && fps.value("state", std::string{}) == "valid";
     label(frame_status, left + 22, 415, span - 44, 24, body_.Get(),
-        frame_status.find(L"已连接") != std::wstring::npos ? mint : amber);
+        frames_valid ? mint : amber);
     label(L"当前目标：" + text_field(snapshot.value("target", Json::object()), "name"), left + 22, 445,
         span - 44, 22, body_.Get(), muted);
     label(L"所选显卡：" + text_field(snapshot, "selected_gpu") + L"   ·   " + text_field(snapshot, "gpu_selection_reason"),

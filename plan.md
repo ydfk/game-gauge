@@ -11,6 +11,8 @@
 - Release 构建、基础契约测试和隔离目录的宿主 IPC/配置持久化冒烟测试通过。实机只读诊断检测到 2 块 GPU、2 块显示器及 HDR 状态；宿主进程在测试中启动、响应 IPC、无 HUD 渲染错误；Windows 接受了捕获排除请求，但**未验证 OBS 实录**。
 - **未完成的关键门槛**：Intel 官方签名 PresentMon Shared Service 已由用户安装并以 LocalSystem 运行，SDK 会话连接成功；但内置 DX11 测试窗口 7 秒采样的原始帧数仍为 0，真实游戏 FPS 尚未验证。需在实际无边框游戏中选定目标并核对帧事件，再定位服务/查询链路。CPU 真实温度仍未得到有效读数。4K HDR 游戏与 OBS 录制视觉验收、完整安装/卸载及公开发行包也尚未完成。
 - 2026-09-28 安装故障修复：管理员运行脚本时 MSI 返回 1619，原因是 PowerShell 数组表达式把 MSI 路径引号拆成独立参数；修复后用户已成功安装并启动服务。后续诊断显示服务连接正常但 DX11 测试窗口无原始帧，仍需真实游戏和服务侧对照。
+- 2026-09-28 后续核查：增加服务指标能力诊断和帧查询布局校验。本机 PresentMon 2.6.0 的能力目录明确报告 `cpu_temperature=not_implemented_by_presentmon`，GPU 五项已查询指标报告可用；CPU 温度需独立后端。DWM 与隐藏 DX11 探针在 5～7 秒内仍为原始帧 0；临时试用官方示例的 50 ms ETW 刷新设置也未改变结果，故未将其作为运行默认值。独立 PresentMon 控制台在普通用户会话中因 ETW 权限不足无法启动，尚不能据此判定服务或查询哪侧有问题。
+- 有效会话秒数现在仅在目标游戏前台且采集未暂停时累计；游戏失焦后继续排空 SDK 帧队列，但不纳入统计，重新聚焦开始新的 60 秒统计段。手动暂停/恢复不再清零同一目标的有效会话秒数。
 - 当前构建脚本：`scripts/build-core.ps1`；技术预览便携包由 `scripts/package-portable.ps1` 生成，未捆绑 PresentMon 服务。诊断程序：`build/core/bin/Release/GameGauge.Diagnostics.exe`。研究用 `.deps` 不进入发行包。Logo 新概念与 SVG 位于 `assets/`。
 
 ## 1. 推荐结论与选择入口
@@ -346,6 +348,18 @@ LibreHardwareMonitor 是 .NET 生态的传感器库，部分传感器需要管�
 **全原生最大的待验证点是广泛的 CPU/主板温度支持，而不是 UI 是否漂亮。** 可选路径：复用许可证适合开源分发的原生监控库/SDK；或基于经过审核的驱动逐步实现 C++ 硬件适配。前者需确认实际支持范围和再分发条件，后者需维护多代 Intel/AMD CPU、主板/EC 和驱动兼容，成本明显更高。签名驱动只提供访问能力，不自动提供正确的全部传感器语义。
 
 阶段 1 需交付原生温度后端的实际可用性、许可、依赖和兼容范围报告。若没有达到要求的路线，明确列出“继续投入原生适配”与“接受隔离的 .NET 传感器组件”供用户选择；不擅自降低 CPU 温度要求、不擅自加入 .NET，也不提前声称全原生完整采集已解决。
+
+本机能力实测（2026-09-28，PresentMon 2.6.0）：CPU 温度由服务标为 `not_implemented_by_presentmon`；不能把接入服务当成完成 CPU 温度。此结论仅针对当前机器与服务版本，独立全原生 CPU 温度路径仍需来源、许可、驱动签名和实机读数验证。
+
+全原生候选的当前证据（2026-09-28）：本机为 AMD Ryzen 9 9950X3D，已经安装并运行 PawnIO 2.0.1.0。`C:\Program Files\PawnIO\PawnIO.sys` 的 Windows 数字签名有效，签名者为 Microsoft Windows Hardware Compatibility Publisher，SHA-256 为 `E19F274B9F3C917445BFF19A80BBE2EE34A54995E62BE50073122B20D86AF900`；这些只证明本机文件状态，尚未核对其与官方发行资产的哈希一致性。安装目录没有可直接复用的 CPU 传感器模块，也未读取任何底层寄存器。PawnIO 官方仓库提供驱动源码及带许可例外的 GPL 条款，官方模块仓库提供签名模块发行版；是否覆盖本机 CPU、温度语义与分发许可都需要按锁定版本审查。[PawnIO 驱动与许可](https://github.com/namazso/PawnIO/blob/master/README.md) · [官方模块仓库](https://github.com/namazso/PawnIO.Modules/blob/main/README.md) · [官方驱动发行版](https://github.com/namazso/PawnIO.Setup/releases)
+
+| 温度路径 | 当前证据 | 下一门槛 |
+| --- | --- | --- |
+| PresentMon 2.6.0 | 本机明确报告 `not_implemented_by_presentmon` | 不能作为本机 CPU 温度后端 |
+| PawnIO + 官方签名模块 + 原生 C++ 解码 | 本机已有签名驱动，官方提供模块发行版；尚无本机温度读数 | 锁定模块版本及哈希、审核许可和只读接口，验证 9950X3D 的 Tctl/Tdie/Package 语义、与独立来源对照，并检查卸载与安全策略；通过前不捆绑发行 |
+| 隔离的 LibreHardwareMonitor 传感器组件 | 上游提供广泛传感器逻辑，但属于 C#/.NET 路线 | 只有全原生路线未达标且用户接受调整范围时才实施 |
+
+目前不能选择“CPU 温度已完成”。优先继续验证 PawnIO 原生路线；若上述门槛失败，向用户提交原生适配继续投入与隔离 .NET 组件两种具体方案供决策。
 
 本次核实的上游开发分支含 PawnIO 相关模块，不能照搬旧教程假设一定使用 WinRing0，也不能把开发分支状态当作稳定发行版保证。实施时锁定具体发布版本，再审核实际随包驱动、模块及安装依赖。[当前项目文件](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/LibreHardwareMonitorLib/LibreHardwareMonitorLib.csproj)
 
