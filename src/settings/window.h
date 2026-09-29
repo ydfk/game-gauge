@@ -46,6 +46,7 @@ private:
     void history_page(float width);
     void updates_page(float width);
     void list_surface(D2D1_RECT_F rect, bool selected = false);
+    void row_action(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> action, bool accent = false);
     void page_buttons(float right, float y, size_t& page, size_t pages, bool reload = false);
     void choose_process(bool excluded);
     void metric_preview(float x, float y, float width);
