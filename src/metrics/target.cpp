@@ -35,11 +35,16 @@ bool ignored(const Target& target, const Config& config) {
     std::string name = target.name;
     std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
     const std::vector<std::string> system{"explorer.exe", "dwm.exe", "applicationframehost.exe", "searchhost.exe", "startmenuexperiencehost.exe", "gamegauge.exe", "gamegauge.settings.exe", "obs64.exe", "chrome.exe", "msedge.exe", "firefox.exe", "code.exe", "chatgpt.exe", "douyin.exe", "steam.exe", "steamwebhelper.exe", "epicgameslauncher.exe", "vlc.exe", "mpv.exe"};
-    if (std::find(system.begin(), system.end(), name) != system.end()) return true;
-    return std::any_of(config.ignored_processes.begin(), config.ignored_processes.end(), [&](std::string item) {
+    if (std::any_of(config.ignored_processes.begin(), config.ignored_processes.end(), [&](std::string item) {
         std::transform(item.begin(), item.end(), item.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
         return item == name;
-    });
+    })) return true;
+    for (const auto& known : config.known_games) if (_stricmp(known.c_str(), target.path.c_str()) == 0) return false;
+    if (!config.auto_target && config.target_pid == target.pid) return false;
+    if (std::find(system.begin(), system.end(), name) != system.end()) return true;
+    if (name.find(" trainer") != std::string::npos) return true;
+    const std::vector<std::string> utilities{"systemsettings.exe", "taskmgr.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe", "notepad.exe", "devenv.exe", "codex.exe", "discord.exe", "wechat.exe", "weixin.exe", "qq.exe", "msiexec.exe", "7zfm.exe", "nvidia overlay.exe", "nvidia app.exe", "redlauncher.exe", "redprelauncher.exe", "eadesktop.exe", "battle.net.exe", "ubisoftconnect.exe", "cheatengine-x86_64.exe", "wemod.exe"};
+    return std::find(utilities.begin(), utilities.end(), name) != utilities.end();
 }
 std::string lower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(tolower(c)); });
@@ -83,6 +88,7 @@ bool target_alive(const Target& target) {
     FILETIME started{}, exited{}, kernel{}, user{};
     return GetProcessTimes(process.value, &started, &exited, &kernel, &user) && file_ticks(started) == target.started;
 }
+bool target_listed(const Target& target, const Config& config) { return !ignored(target, config); }
 std::vector<Target> enumerate_targets() {
     std::vector<Target> targets;
     EnumWindows([](HWND window, LPARAM data) -> BOOL {

@@ -133,8 +133,19 @@ Json Application::request(const Json& command) {
     if (action == "install_update") { updater_.install(); return {{"ok", true}}; }
     if (action == "targets") {
         Json targets = Json::array();
-        for (const auto& target : enumerate_targets()) targets.push_back({{"pid", target.pid}, {"name", target.name}, {"path", target.path}, {"foreground", target.foreground}});
+        const auto current = config();
+        for (const auto& target : enumerate_targets()) if (target_listed(target, current) &&
+            std::none_of(targets.begin(), targets.end(), [&](const Json& row) { return row.at("pid") == target.pid; }))
+            targets.push_back({{"pid", target.pid}, {"name", target.name}, {"path", target.path}, {"foreground", target.foreground}});
+        for (const auto& path : current.known_games) {
+            const bool present = std::any_of(targets.begin(), targets.end(), [&](const Json& row) { return _stricmp(row.at("path").get<std::string>().c_str(), path.c_str()) == 0; });
+            if (!present) targets.push_back({{"pid", 0}, {"name", utf8(std::filesystem::path(wide(path)).filename().wstring())}, {"path", path}, {"foreground", false}});
+        }
         return {{"ok", true}, {"targets", targets}};
+    }
+    if (action == "delete_history") {
+        delete_history(data_dir() / L"history", command.at("id").get<std::string>());
+        return {{"ok", true}};
     }
     if (action == "history") {
         const auto rows = read_history(data_dir() / L"history");

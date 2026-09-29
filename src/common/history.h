@@ -16,5 +16,6 @@ private:
     std::map<uint32_t, Entry> sessions_;
 };
 Json read_history(const std::filesystem::path& directory);
+bool delete_history(const std::filesystem::path& directory, const std::string& id);
 uint64_t wall_time_ms();
 }

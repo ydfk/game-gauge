@@ -3,13 +3,30 @@
 #include <chrono>
 #include <fstream>
 #include <algorithm>
+#include <mutex>
+#include <set>
 
 namespace gauge {
+namespace {
+std::recursive_mutex history_mutex;
+std::set<std::filesystem::path> deleted_sessions;
+}
+bool delete_history(const std::filesystem::path& directory, const std::string& id) {
+    if (id.empty() || id.size() > 64 || id.find_first_not_of("0123456789-") != std::string::npos)
+        throw std::runtime_error("无效的游戏记录编号");
+    std::lock_guard lock(history_mutex);
+    const auto path = directory / (wide(id) + L".json");
+    const bool removed = std::filesystem::remove(path);
+    // 删除当前会话后，本次运行不再写回同一条记录。
+    deleted_sessions.insert(path);
+    return removed;
+}
 uint64_t wall_time_ms() {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count());
 }
 Json read_history(const std::filesystem::path& directory) {
+    std::lock_guard lock(history_mutex);
     std::vector<Json> rows;
     if (!std::filesystem::exists(directory)) return Json::array();
     for (const auto& file : std::filesystem::directory_iterator(directory)) {
@@ -34,6 +51,10 @@ SessionHistory::SessionHistory(std::filesystem::path directory) : directory_(std
     }
 }
 void SessionHistory::save(Entry& entry, uint64_t wall_ms, const char* status) {
+    std::lock_guard lock(history_mutex);
+    if (deleted_sessions.contains(directory_ / (wide(entry.data.at("id").get<std::string>()) + L".json"))) {
+        entry.saved_at = wall_ms; return;
+    }
     std::filesystem::create_directories(directory_);
     entry.data["status"] = status; entry.data["updated_ms"] = wall_ms;
     entry.data["duration_seconds"] = (wall_ms - std::min(wall_ms, entry.data.value("started_ms", wall_ms))) / 1000.0;

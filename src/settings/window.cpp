@@ -1,6 +1,7 @@
 #include "window.h"
 #include "common/platform.h"
 #include "host/ipc_server.h"
+#include "version.h"
 #include <windowsx.h>
 #include <wincodec.h>
 #include <shellapi.h>
@@ -242,8 +243,7 @@ void SettingsWindow::navigation(float width, float height) {
     }
     line(28, height - 104, 208, height - 104, edge);
     label(L"游戏仪表", 28, height - 81, 190, 20, small_.Get(), muted);
-    label(error_.empty() ? L"主程序已连接" : L"主程序未连接", 28, height - 55, 180, 20,
-        small_.Get(), error_.empty() ? mint : amber);
+    label(L"版本 " + wide(GAMEGAUGE_VERSION), 28, height - 55, 180, 20, small_.Get(), muted);
     fill(D2D1::RectF(236, 0, width, height), background);
 }
 void SettingsWindow::paint() {

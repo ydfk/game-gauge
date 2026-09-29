@@ -1,6 +1,8 @@
 ﻿$ErrorActionPreference = 'Stop'
 Start-Transcript -LiteralPath (Join-Path $PSScriptRoot 'install.log') -Force | Out-Null
+function Set-InstallProgress([int]$Value) { [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'progress.txt'), [string]$Value) }
 try {
+    Set-InstallProgress 5
     $taskPayload = Join-Path $PSScriptRoot 'payload'
     Expand-Archive -LiteralPath (Join-Path $PSScriptRoot 'payload.zip') -DestinationPath $taskPayload -Force
     $taskDestination = Join-Path $env:ProgramFiles 'GameGauge'
@@ -15,7 +17,9 @@ try {
     }
     . (Join-Path $taskPayload 'app/scripts/setup-processes.ps1')
     Stop-GameGaugeProcesses -Directory $taskDestination
+    Set-InstallProgress 25
     Copy-Item -Path (Join-Path $taskPayload 'app/*') -Destination $taskDestination -Recurse -Force
+    Set-InstallProgress 40
     & (Join-Path $taskDestination 'scripts/install-presentmon.ps1') -MsiPath (Join-Path $taskPayload 'PresentMon-2.6.0.msi')
     $taskPawn = Join-Path $taskPayload 'PawnIO_setup.exe'
     if ((Get-FileHash -LiteralPath $taskPawn -Algorithm SHA256).Hash -ne '1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032') { throw 'PawnIO 安装器哈希不符' }
@@ -25,6 +29,7 @@ try {
         if ($taskProcess.ExitCode -ne 0) { throw "PawnIO 安装失败：$($taskProcess.ExitCode)" }
     }
     $taskCpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    Set-InstallProgress 60
     if ($taskCpu.Manufacturer -eq 'AuthenticAMD') {
         $taskServiceCommand = '"' + (Join-Path $taskDestination 'GameGauge.CpuProbe.exe') + '" --service'
         if (!$taskSensor) { New-Service -Name 'GameGauge.Sensor' -BinaryPathName $taskServiceCommand -DisplayName 'GameGauge CPU Temperature' -StartupType Automatic | Out-Null }
@@ -41,6 +46,7 @@ try {
         Start-Service 'GameGauge.Sensor'
     }
     $taskShell = New-Object -ComObject WScript.Shell
+    Set-InstallProgress 75
     $taskPrograms = [Environment]::GetFolderPath('CommonPrograms')
     Remove-Item -LiteralPath (Join-Path $taskPrograms '游戏仪表.lnk') -ErrorAction SilentlyContinue
     $taskShortcut = $taskShell.CreateShortcut((Join-Path $taskPrograms '游戏仪表 GameGauge.lnk'))
@@ -65,12 +71,14 @@ try {
     if (!(Test-Path -LiteralPath $taskDesktopPath) -or !(Get-ItemProperty $taskRegistry).UninstallString) { throw '快捷方式或卸载注册未完成' }
     # 通过交互用户的普通权限计划任务启动，避免让主程序继承安装器权限。
     $taskUser = (Get-CimInstance Win32_ComputerSystem).UserName
+    Set-InstallProgress 90
     if ($taskUser) {
         $taskAction = New-ScheduledTaskAction -Execute $taskShortcut.TargetPath -WorkingDirectory $taskDestination
         $taskPrincipal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive -RunLevel Limited
         Register-ScheduledTask -TaskName 'GameGauge.StartAfterInstall' -Action $taskAction -Principal $taskPrincipal -Force | Out-Null
         Start-ScheduledTask -TaskName 'GameGauge.StartAfterInstall'
     }
+    Set-InstallProgress 100
     Stop-Transcript | Out-Null
     exit 0
 } catch {

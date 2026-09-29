@@ -2,6 +2,7 @@
 #include "common/frame_statistics.h"
 #include "common/history.h"
 #include "common/update_release.h"
+#include "metrics/target.h"
 #include <fstream>
 #include <windows.h>
 #include <cmath>
@@ -72,7 +73,27 @@ int main() {
         { gauge::SessionHistory recovery(directory); }
         rows = gauge::read_history(directory);
         require(rows.size() == 2 && rows[0]["status"] == "interrupted", "unclean shutdown must recover history");
+        require(gauge::delete_history(directory, rows[0]["id"].get<std::string>()), "history delete must remove selected record");
+        require(gauge::read_history(directory).size() == 1, "history delete must preserve other records");
+        bool rejected_path = false;
+        try { gauge::delete_history(directory, "../outside"); } catch (...) { rejected_path = true; }
+        require(rejected_path, "history deletion must reject path traversal");
+        { gauge::SessionHistory history(directory); game.timestamp_ms = 50000;
+          history.update(game, 50000, [](const auto&) { return true; });
+          const auto active_rows = gauge::read_history(directory);
+          const auto id = active_rows[0]["id"].get<std::string>();
+          gauge::delete_history(directory, id);
+          game.timestamp_ms = 60000; history.update(game, 60000, [](const auto&) { return true; });
+          history.finish_all(70000);
+          for (const auto& row : gauge::read_history(directory)) require(row["id"] != id, "deleted active session must not reappear"); }
         std::filesystem::remove_all(directory);
+        gauge::Target browser; browser.pid = 42; browser.name = "chrome.exe"; browser.path = "C:\\Apps\\chrome.exe";
+        gauge::Config filtering;
+        require(!gauge::target_listed(browser, filtering), "browser must be hidden automatically");
+        filtering.known_games.push_back(browser.path);
+        require(gauge::target_listed(browser, filtering), "manual game must override automatic filtering");
+        filtering.ignored_processes.push_back("CHROME.EXE");
+        require(!gauge::target_listed(browser, filtering), "explicit exclusion must match case insensitively");
         const std::string repository = "example/GameGauge";
         gauge::Json release = {{"draft", false}, {"prerelease", false}, {"tag_name", "v1.10.0"}, {"assets", gauge::Json::array({{
             {"name", "GameGauge-1.10.0-Setup.exe"}, {"browser_download_url", "https://github.com/example/GameGauge/releases/download/v1.10.0/GameGauge-1.10.0-Setup.exe"},
