@@ -9,8 +9,12 @@ try {
     New-Item -ItemType Directory -Path $taskDestination -Force | Out-Null
     if ((Get-Item -LiteralPath $taskDestination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '安装目录不能是重解析点' }
     $taskSensor = Get-Service 'GameGauge.Sensor' -ErrorAction SilentlyContinue
-    if ($taskSensor) { Stop-Service 'GameGauge.Sensor' -Force }
-    Get-Process GameGauge,GameGauge.Settings -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$taskDestination\*" } | Stop-Process
+    if ($taskSensor) {
+        Stop-Service 'GameGauge.Sensor' -Force
+        $taskSensor.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(15))
+    }
+    . (Join-Path $taskPayload 'app/scripts/setup-processes.ps1')
+    Stop-GameGaugeProcesses -Directory $taskDestination
     Copy-Item -Path (Join-Path $taskPayload 'app/*') -Destination $taskDestination -Recurse -Force
     & (Join-Path $taskDestination 'scripts/install-presentmon.ps1') -MsiPath (Join-Path $taskPayload 'PresentMon-2.6.0.msi')
     $taskPawn = Join-Path $taskPayload 'PawnIO_setup.exe'

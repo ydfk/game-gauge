@@ -9,7 +9,8 @@ if ([IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent)) -ne $taskDestinat
 if ((Get-Item -LiteralPath $taskDestination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '拒绝卸载重解析目录' }
 Get-Service GameGauge.Sensor -ErrorAction SilentlyContinue | Stop-Service -Force
 & sc.exe delete GameGauge.Sensor | Out-Null
-Get-Process GameGauge,GameGauge.Settings -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$taskDestination\*" } | Stop-Process
+. (Join-Path $PSScriptRoot 'setup-processes.ps1')
+Stop-GameGaugeProcesses -Directory $taskDestination
 Unregister-ScheduledTask -TaskName 'GameGauge.StartAfterInstall' -Confirm:$false -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue

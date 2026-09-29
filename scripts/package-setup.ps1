@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp
 foreach ($taskName in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot "build/core/bin/Release/$taskName") -Destination $taskApp
 }
-foreach ($taskName in @('install-presentmon.ps1','setup-uninstall.ps1')) {
+foreach ($taskName in @('install-presentmon.ps1','setup-uninstall.ps1','setup-processes.ps1')) {
     [IO.File]::WriteAllText((Join-Path "$taskApp/scripts" $taskName), [IO.File]::ReadAllText((Join-Path $PSScriptRoot $taskName)), [Text.UTF8Encoding]::new($true))
 }
 Copy-Item -LiteralPath "$taskRoot/.deps/AMDFamily17-0.2.11.bin" -Destination "$taskApp/.deps"

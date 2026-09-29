@@ -15,6 +15,13 @@ void extract(int id, const std::filesystem::path& path) {
 }
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    const auto installation = CreateMutexW(nullptr, FALSE, L"Global\\GameGauge.Setup");
+    if (!installation) return 1;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(installation);
+        MessageBoxW(nullptr, L"另一个游戏仪表安装程序仍在运行，请先完成或关闭它。", L"安装游戏仪表", MB_OK | MB_ICONINFORMATION);
+        return 1;
+    }
     if (MessageBoxW(nullptr, L"安装游戏仪表及所需的帧率和温度采集组件？\n安装完成后会自动启动，并随 Windows 登录运行。", L"安装游戏仪表", MB_OKCANCEL | MB_ICONINFORMATION) != IDOK) return 0;
     try {
         wchar_t temporary[MAX_PATH]{}, windows[MAX_PATH]{};
