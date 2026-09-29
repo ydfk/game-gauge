@@ -34,6 +34,8 @@ float ui_scale(UINT dpi, const RECT& work) {
 SettingsWindow::SettingsWindow(HINSTANCE instance) : instance_(instance) {
     WNDCLASSEXW cls{sizeof(cls)};
     cls.hInstance = instance; cls.lpfnWndProc = procedure; cls.lpszClassName = L"GameGauge.Settings";
+    cls.hIcon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON, 32, 32, LR_SHARED));
+    cls.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON, 16, 16, LR_SHARED));
     cls.hCursor = LoadCursorW(nullptr, IDC_ARROW); RegisterClassExW(&cls);
     POINT cursor{}; GetCursorPos(&cursor);
     const auto work = monitor_work(MonitorFromPoint(cursor, MONITOR_DEFAULTTOPRIMARY));
@@ -250,9 +252,6 @@ void SettingsWindow::paint() {
         L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。"};
     label(page_titles[page_], 272, 35, width - 420, 43, title_.Get(), white);
     label(page_subtitles[page_], 273, 83, width - 340, 26, body_.Get(), muted);
-    fill(D2D1::RectF(width - 165, 43, width - 28, 76), panel_high, 16);
-    label(error_.empty() ? L"●  正在运行" : L"●  等待主程序", width - 150, 47, 123, 25,
-        small_.Get(), error_.empty() ? mint : amber);
     line(272, 122, width - 28, 122, edge);
     switch (page_) {
     case 0: appearance_page(width); break;

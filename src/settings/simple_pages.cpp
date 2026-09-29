@@ -1,5 +1,6 @@
 #include "window.h"
 #include "common/platform.h"
+#include "hud/renderer.h"
 #include <commdlg.h>
 #include <algorithm>
 #include <format>
@@ -21,18 +22,35 @@ std::wstring local_time(uint64_t milliseconds) {
     wchar_t text[64]{}; wcsftime(text, 64, L"%Y-%m-%d %H:%M", &value); return text;
 }
 }
+void SettingsWindow::list_surface(D2D1_RECT_F rect, bool checked) {
+    fill(rect, checked ? selected : panel, 8);
+}
+void SettingsWindow::page_buttons(float right, float y, size_t& page, size_t pages, bool reload) {
+    button(L"上一页", D2D1::RectF(right - 190, y, right - 101, y + 36), [this, &page, reload](float) { if (page) --page; if (reload) refresh(); });
+    button(L"下一页", D2D1::RectF(right - 89, y, right, y + 36), [this, &page, pages, reload](float) { if (page + 1 < pages) ++page; if (reload) refresh(); });
+}
 void SettingsWindow::appearance_page(float width) {
     const float left = 272, right = width - 28, span = right - left, half = (span - 14) / 2;
     fill(D2D1::RectF(left, 148, right, 345), panel, 12);
-    label(L"游戏窗口预览", left + 18, 160, 200, 24, heading_.Get(), white);
-    const float bar_width = std::min(span - 48, 395.f);
-    float x = left + (span - bar_width) / 2;
+    label(L"监控条实时预览", left + 18, 160, span - 36, 24, heading_.Get(), white);
+    std::vector<HudItem> items;
+    for (const auto& row : status_.value("hud_preview", Json::array())) {
+        const auto color = row.at("color");
+        items.push_back({wide(row.value("label", std::string{})), wide(row.value("value", std::string{})),
+            D2D1::ColorF(color[0].get<float>(), color[1].get<float>(), color[2].get<float>()), wide(row.value("group", std::string{}))});
+    }
+    if (items.empty()) items = hud_items(Snapshot{}, config_);
+    const auto size = measure_hud_items(write_.Get(), items, config_);
+    const float fit = std::min(1.f, (span - 36) / std::max(1.f, size.width));
+    float x = left + (span - size.width * fit) / 2;
     if (config_.anchor == 1) x = left + 18;
-    if (config_.anchor == 2) x = right - bar_width - 18;
-    const float y = config_.anchor == 3 ? 297.f : 205.f;
-    fill(D2D1::RectF(x, y, x + bar_width, y + 25), background, 3);
-    label(L"FPS 144   CPU 65°C 24%   GPU 62°C 97%", x + 5, y + 2, bar_width - 10, 21, small_.Get(), mint);
-    label(L"位置示意 · 仅在游戏窗口内显示", left + 18, 253, span - 36, 22, small_.Get(), muted);
+    if (config_.anchor == 2) x = right - 18 - size.width * fit;
+    const float y = config_.anchor == 3 ? 324.f - size.height * fit : 202.f;
+    D2D1_MATRIX_3X2_F saved; target_->GetTransform(&saved);
+    target_->SetTransform(D2D1::Matrix3x2F::Scale(fit, fit) * D2D1::Matrix3x2F::Translation(x, y) * saved);
+    draw_hud_items(target_.Get(), write_.Get(), items, config_, size.width, size.height);
+    target_->SetTransform(saved);
+    label(fit < 1 ? L"按可用宽度缩小显示" : L"与游戏内共用字号、颜色、间距及实时读数", left + 18, 253, span - 36, 22, small_.Get(), muted);
     toggle(L"游戏内监控", L"识别游戏后自动显示，退出后关闭", config_.enabled,
         D2D1::RectF(left, 365, left + half, 427), [this](float) { config_.enabled = !config_.enabled; apply(); });
     toggle(L"录屏隐藏监控", L"让录制画面保持干净", config_.exclude_capture,
@@ -63,8 +81,8 @@ void SettingsWindow::metrics_page(float width) {
         for (size_t i = 0; i < ids.size(); ++i) {
             const auto id = ids[i]; const float x = left + static_cast<float>(i % 4) * (box + 10), row = y + static_cast<float>(i / 4) * 57;
             const auto rect = D2D1::RectF(x, row, x + box, row + 48); const bool checked = contains(config_.metrics, id);
-            fill(rect, checked ? selected : panel, 8);
-            label((checked ? L"✓ " : L"   ") + metric_name(id), x + 10, row + 3, box - 20, 22, small_.Get(), checked ? white : muted);
+            list_surface(rect, checked);
+            label((checked ? L"✓ " : L"   ") + metric_name(id), x + 14, row + 3, box - 28, 22, body_.Get(), white);
             label(metric_value(id), x + 28, row + 24, box - 38, 19, small_.Get(), checked ? mint : muted);
             add(rect, [this, id](float) {
                 auto& metrics = config_.metrics; const auto it = std::find(metrics.begin(), metrics.end(), id);
@@ -94,12 +112,11 @@ void SettingsWindow::games_page(float width) {
     button(L"添加游戏…", D2D1::RectF(left, 222, left + 165, 260), [this](float) { choose_process(false); });
     button(L"排除程序…", D2D1::RectF(left + 178, 222, left + 343, 260), [this](float) { choose_process(true); });
     const auto pages = std::max(size_t{1}, (targets_.size() + 3) / 4); target_page_ = std::min(target_page_, pages - 1);
-    button(L"上一页", D2D1::RectF(right - 176, 222, right - 94, 260), [this](float) { if (target_page_) --target_page_; });
-    button(L"下一页", D2D1::RectF(right - 82, 222, right, 260), [this, pages](float) { target_page_ = (target_page_ + 1) % pages; });
+    page_buttons(right, 222, target_page_, pages);
     float y = 282;
     for (size_t i = target_page_ * 4; i < std::min(targets_.size(), target_page_ * 4 + 4); ++i) {
         const auto item = targets_[i]; const auto process = item.value("name", std::string{}), path = item.value("path", std::string{});
-        fill(D2D1::RectF(left, y, right, y + 48), panel, 8);
+        list_surface(D2D1::RectF(left, y, right, y + 48));
         label(wide(process), left + 14, y + 11, span - 265, 26, body_.Get(), white);
         button(contains(config_.known_games, path) ? L"已记住" : L"设为游戏", D2D1::RectF(right - 244, y + 6, right - 129, y + 42),
             [this, path](float) { if (!path.empty() && !contains(config_.known_games, path)) config_.known_games.push_back(path); config_.auto_target = true; apply(); });
@@ -110,13 +127,13 @@ void SettingsWindow::games_page(float width) {
     label(L"已排除的程序", left, 530, span - 185, 28, heading_.Get(), white);
     const auto blocked_pages = std::max(size_t{1}, (config_.ignored_processes.size() + 2) / 3);
     blacklist_page_ = std::min(blacklist_page_, blocked_pages - 1);
-    button(L"翻页", D2D1::RectF(right - 82, 526, right, 562), [this, blocked_pages](float) { blacklist_page_ = (blacklist_page_ + 1) % blocked_pages; });
+    page_buttons(right, 526, blacklist_page_, blocked_pages);
     y = 578;
     for (size_t i = blacklist_page_ * 3; i < std::min(config_.ignored_processes.size(), blacklist_page_ * 3 + 3); ++i) {
-        const auto process = config_.ignored_processes[i]; fill(D2D1::RectF(left, y, right, y + 42), panel, 8);
-        label(wide(process), left + 14, y + 8, span - 135, 25, body_.Get(), muted);
-        button(L"移除", D2D1::RectF(right - 97, y + 4, right - 12, y + 38), [this, process](float) {
-            std::erase(config_.ignored_processes, process); apply(); }); y += 51;
+        const auto process = config_.ignored_processes[i]; list_surface(D2D1::RectF(left, y, right, y + 48));
+        label(wide(process), left + 14, y + 11, span - 135, 26, body_.Get(), white);
+        button(L"移除", D2D1::RectF(right - 97, y + 6, right - 12, y + 42), [this, process](float) {
+            std::erase(config_.ignored_processes, process); apply(); }); y += 58;
     }
     if (config_.ignored_processes.empty()) label(L"暂无排除程序", left, y, span, 25, small_.Get(), muted);
 }
@@ -124,18 +141,17 @@ void SettingsWindow::history_page(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto pages = std::max(size_t{1}, (history_count_ + 3) / 4); history_page_index_ = std::min(history_page_index_, pages - 1);
     label(std::format(L"{} 次游戏记录", history_count_), left, 148, span - 220, 28, heading_.Get(), white);
-    button(L"上一页", D2D1::RectF(right - 190, 144, right - 101, 182), [this](float) { if (history_page_index_) --history_page_index_; refresh(); });
-    button(L"下一页", D2D1::RectF(right - 89, 144, right, 182), [this, pages](float) { history_page_index_ = (history_page_index_ + 1) % pages; refresh(); });
+    page_buttons(right, 144, history_page_index_, pages, true);
     float y = 205;
     for (size_t i = 0; i < history_.size(); ++i) {
-        const auto& row = history_[i]; fill(D2D1::RectF(left, y, right, y + 117), panel, 10);
-        label(wide(row.value("game", std::string{})), left + 17, y + 10, span - 210, 27, heading_.Get(), white);
+        const auto& row = history_[i]; list_surface(D2D1::RectF(left, y, right, y + 117));
+        label(wide(row.value("game", std::string{})), left + 14, y + 11, span - 210, 26, body_.Get(), white);
         const auto state = row.value("status", std::string{});
         label(state == "running" ? L"进行中" : state == "completed" ? L"已结束" : L"监控已结束", right - 140, y + 10, 120, 27, small_.Get(), mint);
-        label(local_time(row.value("started_ms", 0ull)) + L"  ·  游玩 " + value_text(row, "active_seconds", L" 秒"), left + 17, y + 42, span - 34, 25, small_.Get(), muted);
+        label(local_time(row.value("started_ms", 0ull)) + L"  ·  游玩 " + value_text(row, "active_seconds", L" 秒"), left + 14, y + 42, span - 28, 25, small_.Get(), muted);
         label(L"平均 FPS " + value_text(row, "average_fps") + L"    最高 FPS " + value_text(row, "maximum_fps") +
             L"    CPU 最高 " + value_text(row, "cpu_max_celsius", L"°C") + L"    GPU 最高 " + value_text(row, "gpu_max_celsius", L"°C"),
-            left + 17, y + 77, span - 34, 23, small_.Get(), white); y += 133;
+            left + 14, y + 77, span - 28, 23, small_.Get(), white); y += 127;
     }
     if (history_.empty()) label(L"开始游戏后自动记录，游戏退出后可在这里查看。", left, 230, span, 30, body_.Get(), muted);
     const auto error = status_.value("snapshot", Json::object()).value("history_error", std::string{});

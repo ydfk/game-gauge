@@ -79,9 +79,8 @@ struct SystemCounters {
     void select_gpu(Snapshot& s, const Config& config) {
         if (!config.gpu_id.empty()) {
             const bool exists = std::any_of(s.hardware.gpus.begin(), s.hardware.gpus.end(), [&](const Gpu& gpu) { return gpu.id == config.gpu_id; });
-            s.selected_gpu = exists ? config.gpu_id : std::string{};
-            s.gpu_selection_reason = exists ? "用户指定的 GPU" : "指定 GPU 暂不可用";
-            return;
+            if (exists) { s.selected_gpu = config.gpu_id; s.gpu_selection_reason = "用户指定的 GPU"; return; }
+            // LUID 不是持久硬件标识，重启后失效时恢复自动选择。
         }
         std::map<std::string, double> target_load;
         if (gpu_engines && s.target.pid) {
@@ -108,14 +107,16 @@ struct SystemCounters {
             }
         }
         auto best = std::max_element(target_load.begin(), target_load.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
-        if (best != target_load.end() && best->second > .05) {
+        if (best != target_load.end() && best->second > .05 && std::any_of(s.hardware.gpus.begin(), s.hardware.gpus.end(), [&](const Gpu& gpu) { return gpu.id == best->first; })) {
             s.selected_gpu = best->first; s.gpu_selection_reason = "Windows 游戏进程 3D 引擎 LUID";
         } else if (s.hardware.gpus.size() == 1) {
             s.selected_gpu = s.hardware.gpus.front().id; s.gpu_selection_reason = "唯一硬件适配器";
         } else if (!s.selected_gpu.empty() && s.target.pid) {
             s.gpu_selection_reason = "保留此游戏上次确认的 GPU";
         } else {
-            s.selected_gpu.clear(); s.gpu_selection_reason = "等待游戏 GPU 活动";
+            auto preferred = std::max_element(s.hardware.gpus.begin(), s.hardware.gpus.end(), [](const Gpu& a, const Gpu& b) { return a.dedicated_bytes < b.dedicated_bytes; });
+            s.selected_gpu = preferred == s.hardware.gpus.end() ? std::string{} : preferred->id;
+            s.gpu_selection_reason = "默认独立显卡，游戏引擎活动出现后自动确认";
         }
     }
 };

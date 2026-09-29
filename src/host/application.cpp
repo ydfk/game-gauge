@@ -45,7 +45,9 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     WNDCLASSW cls{}; cls.hInstance = instance; cls.lpfnWndProc = procedure; cls.lpszClassName = L"GameGauge.Host"; RegisterClassW(&cls);
     window_ = CreateWindowW(cls.lpszClassName, L"游戏仪表", WS_OVERLAPPED, 0, 0, 0, 0, nullptr, nullptr, instance, this);
     if (!window_) throw std::runtime_error(error_text(GetLastError()));
-    icon_ = make_icon(); taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
+    icon_ = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON, 32, 32, 0));
+    if (!icon_) icon_ = make_icon();
+    taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     overlay_ = std::make_unique<Overlay>(instance);
     add_tray();
     const auto mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
@@ -71,7 +73,10 @@ void Application::update_config(Config next) {
 void Application::add_tray() {
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1;
     tray.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP; tray.uCallbackMessage = tray_message; tray.hIcon = icon_;
-    wcscpy_s(tray.szTip, L"游戏仪表 · 右键打开监控菜单"); Shell_NotifyIconW(NIM_ADD, &tray);
+    wcscpy_s(tray.szTip, L"游戏仪表 · 右键打开监控菜单");
+    if (!Shell_NotifyIconW(NIM_ADD, &tray)) {
+        if (!Shell_NotifyIconW(NIM_MODIFY, &tray)) SetTimer(window_, 3, 2000, nullptr);
+    } else KillTimer(window_, 3);
 }
 void Application::settings() {
     auto path = executable_dir() / L"GameGauge.Settings.exe";
@@ -108,7 +113,12 @@ Json Application::request(const Json& command) {
     const auto action = command.value("command", std::string("status"));
     if (action == "status") {
         std::lock_guard lock(mutex_);
+        const auto snapshot = sampler_.snapshot();
+        Json preview = Json::array();
+        for (const auto& item : hud_items(snapshot, config_)) preview.push_back({{"label", utf8(item.label)}, {"value", utf8(item.value)},
+            {"group", utf8(item.group)}, {"color", {item.color.r, item.color.g, item.color.b}}});
         return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(sampler_.snapshot())},
+            {"hud_preview", preview},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
             {"warning", warning_}, {"hud_error", hud_error_}};
     }
@@ -149,6 +159,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
         if (message == self->taskbar_created_ && self->taskbar_created_) { self->add_tray(); return 0; }
         if (message == tray_message) { if (lparam == WM_RBUTTONUP) self->menu(); else if (lparam == WM_LBUTTONUP || lparam == WM_LBUTTONDBLCLK) self->settings(); return 0; }
         if (message == WM_TIMER) {
+            if (wparam == 3) { self->add_tray(); return 0; }
             if (wparam == 2) { PostQuitMessage(0); return 0; }
             if (auto edit_result = self->overlay_->take_edit_result()) {
                 if (*edit_result) {

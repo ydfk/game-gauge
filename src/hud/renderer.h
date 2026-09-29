@@ -8,8 +8,10 @@
 #include <wrl/client.h>
 
 namespace gauge {
-struct HudItem { std::wstring label, value; D2D1_COLOR_F color; };
+struct HudItem { std::wstring label, value; D2D1_COLOR_F color; std::wstring group; };
 std::vector<HudItem> hud_items(const Snapshot& snapshot, const Config& config);
+D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config);
+void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config, float width, float height);
 class Renderer {
 public:
     explicit Renderer(HWND window);
@@ -31,4 +33,3 @@ private:
     float font_size_{};
 };
 }
-
