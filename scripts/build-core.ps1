@@ -1,4 +1,4 @@
-param([ValidateSet('Debug','Release')][string]$Configuration = 'Release', [string]$Version, [string]$Repository = '')
+﻿param([ValidateSet('Debug','Release')][string]$Configuration = 'Release', [string]$Version, [string]$Repository = '')
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (!$Version) { $Version = (Get-Content -LiteralPath "$taskRoot/VERSION" -Raw).Trim() }

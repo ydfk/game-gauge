@@ -25,6 +25,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         const auto powershell = std::filesystem::path(windows) / L"System32/WindowsPowerShell/v1.0/powershell.exe";
         std::wstring command = L"\"" + powershell.wstring() + L"\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + (directory / L"install.ps1").wstring() + L"\"";
         STARTUPINFOW startup{sizeof(startup)}; PROCESS_INFORMATION process{};
+        // 从 PowerShell 7 启动安装器时也使用 Windows PowerShell 自己的系统模块目录。
+        SetEnvironmentVariableW(L"PSModulePath", nullptr);
         if (!CreateProcessW(powershell.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &process))
             throw std::runtime_error("Cannot start installation");
         WaitForSingleObject(process.hProcess, INFINITE);

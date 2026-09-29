@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Start-Transcript -LiteralPath (Join-Path $PSScriptRoot 'install.log') -Force | Out-Null
 try {
     $taskPayload = Join-Path $PSScriptRoot 'payload'
@@ -24,20 +24,41 @@ try {
     if ($taskCpu.Manufacturer -eq 'AuthenticAMD') {
         $taskServiceCommand = '"' + (Join-Path $taskDestination 'GameGauge.CpuProbe.exe') + '" --service'
         if (!$taskSensor) { New-Service -Name 'GameGauge.Sensor' -BinaryPathName $taskServiceCommand -DisplayName 'GameGauge CPU Temperature' -StartupType Automatic | Out-Null }
-        else { & sc.exe config GameGauge.Sensor binPath= $taskServiceCommand start= auto | Out-Null; if ($LASTEXITCODE) { throw '更新温度服务失败' } }
-        & sc.exe failure GameGauge.Sensor reset= 86400 actions= restart/5000/restart/15000 | Out-Null
+        else {
+            # 使用结构化参数，避免 Windows PowerShell 5.1 转发带空格路径时丢失引号。
+            $taskService = Get-CimInstance Win32_Service -Filter "Name='GameGauge.Sensor'"
+            $taskChange = Invoke-CimMethod -InputObject $taskService -MethodName Change -Arguments @{PathName=$taskServiceCommand;StartMode='Automatic'}
+            if ($taskChange.ReturnValue -ne 0) { throw "更新温度服务失败，Win32_Service.Change 返回 $($taskChange.ReturnValue)" }
+        }
+        $taskRecovery = & "$env:WINDIR/System32/sc.exe" failure GameGauge.Sensor reset= 86400 actions= restart/5000/restart/15000 2>&1
+        if ($LASTEXITCODE) { throw "设置温度服务恢复策略失败：$taskRecovery" }
+        $taskConfigured = Get-CimInstance Win32_Service -Filter "Name='GameGauge.Sensor'"
+        if ($taskConfigured.PathName -ne $taskServiceCommand -or $taskConfigured.StartMode -ne 'Auto') { throw '温度服务配置读回不一致' }
         Start-Service 'GameGauge.Sensor'
     }
     $taskShell = New-Object -ComObject WScript.Shell
     $taskPrograms = [Environment]::GetFolderPath('CommonPrograms')
-    $taskShortcut = $taskShell.CreateShortcut((Join-Path $taskPrograms '游戏仪表.lnk'))
+    Remove-Item -LiteralPath (Join-Path $taskPrograms '游戏仪表.lnk') -ErrorAction SilentlyContinue
+    $taskShortcut = $taskShell.CreateShortcut((Join-Path $taskPrograms '游戏仪表 GameGauge.lnk'))
     $taskShortcut.TargetPath = Join-Path $taskDestination 'GameGauge.exe'; $taskShortcut.WorkingDirectory = $taskDestination; $taskShortcut.Save()
+    $taskDesktopPath = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) '游戏仪表 GameGauge.lnk'
+    $taskDesktop = $taskShell.CreateShortcut($taskDesktopPath)
+    $taskDesktop.TargetPath = $taskShortcut.TargetPath; $taskDesktop.WorkingDirectory = $taskDestination; $taskDesktop.Save()
+    $taskPowerShell = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    $taskUninstallArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $taskDestination 'scripts/setup-uninstall.ps1') + '"'
+    $taskUninstallLink = $taskShell.CreateShortcut((Join-Path $taskPrograms '卸载游戏仪表 GameGauge.lnk'))
+    $taskUninstallLink.TargetPath = $taskPowerShell; $taskUninstallLink.Arguments = $taskUninstallArgs
+    $taskUninstallLink.WindowStyle = 7; $taskUninstallLink.Save()
     $taskStartup = $taskShell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'GameGauge.lnk'))
     $taskStartup.TargetPath = $taskShortcut.TargetPath; $taskStartup.Arguments = '--background'; $taskStartup.WorkingDirectory = $taskDestination; $taskStartup.Save()
     $taskRegistry = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GameGauge'
     New-Item $taskRegistry -Force | Out-Null
-    $taskUninstall = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $taskDestination 'scripts/setup-uninstall.ps1') + '"'
-    @{DisplayName='游戏仪表';DisplayVersion=$taskRelease.version;Publisher='GameGauge';InstallLocation=$taskDestination;UninstallString=$taskUninstall;DisplayIcon=$taskShortcut.TargetPath}.GetEnumerator() | ForEach-Object { New-ItemProperty $taskRegistry -Name $_.Key -Value $_.Value -Force | Out-Null }
+    $taskUninstall = '"' + $taskPowerShell + '" ' + $taskUninstallArgs
+    @{DisplayName='游戏仪表 GameGauge';DisplayVersion=$taskRelease.version;Publisher='GameGauge';InstallLocation=$taskDestination;UninstallString=$taskUninstall;DisplayIcon=('"' + $taskShortcut.TargetPath + '",0');InstallDate=(Get-Date -Format 'yyyyMMdd')}.GetEnumerator() | ForEach-Object { New-ItemProperty $taskRegistry -Name $_.Key -Value $_.Value -PropertyType String -Force | Out-Null }
+    foreach ($taskName in @('NoModify','NoRepair')) { New-ItemProperty $taskRegistry -Name $taskName -Value 1 -PropertyType DWord -Force | Out-Null }
+    $taskSize = [int][Math]::Ceiling((Get-ChildItem -LiteralPath $taskDestination -Recurse -File | Measure-Object Length -Sum).Sum / 1024)
+    New-ItemProperty $taskRegistry -Name EstimatedSize -Value $taskSize -PropertyType DWord -Force | Out-Null
+    if (!(Test-Path -LiteralPath $taskDesktopPath) -or !(Get-ItemProperty $taskRegistry).UninstallString) { throw '快捷方式或卸载注册未完成' }
     # 通过交互用户的普通权限计划任务启动，避免让主程序继承安装器权限。
     $taskUser = (Get-CimInstance Win32_ComputerSystem).UserName
     if ($taskUser) {
@@ -50,6 +71,8 @@ try {
     exit 0
 } catch {
     Write-Output $_
+    # 安装中途失败时恢复已有采集服务，防止旧安装停留在停止状态。
+    if ($taskSensor) { Start-Service 'GameGauge.Sensor' -ErrorAction Continue }
     Stop-Transcript | Out-Null
     exit 1
 }

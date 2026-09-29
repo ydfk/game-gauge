@@ -19,6 +19,7 @@ Json metric_json(const Metric& metric) {
 Config config_from_json(const Json& json) {
     if (!json.is_object() || json.value("version", 1) != 1) throw std::runtime_error("不支持的配置版本");
     Config config;
+    config.show_obs = json.value("show_obs", true);
     config.check_updates = json.value("check_updates", true);
     config.auto_update = json.value("auto_update", false);
     config.enabled = json.value("enabled", true);
@@ -63,7 +64,7 @@ Config config_from_json(const Json& json) {
     return config;
 }
 Json config_json(const Config& c) {
-    return {{"version", 1}, {"check_updates", c.check_updates}, {"auto_update", c.auto_update}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
+    return {{"version", 1}, {"show_obs", c.show_obs}, {"check_updates", c.check_updates}, {"auto_update", c.auto_update}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
         {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
         {"target_pid", c.target_pid}, {"refresh_ms", c.refresh_ms}, {"font_size", c.font_size}, {"opacity", c.opacity},
         {"anchor", c.anchor}, {"margin_x", c.margin_x}, {"margin_y", c.margin_y}, {"gpu_id", c.gpu_id},
@@ -103,7 +104,7 @@ Json snapshot_json(const Snapshot& s) {
         {"memory_used", metric_json(gpu.memory_used)}, {"memory_total", metric_json(gpu.memory_total)}, {"fan", metric_json(gpu.fan)}});
     for (const auto& d : s.hardware.displays) displays.push_back({{"name", d.name}, {"x", d.x}, {"y", d.y},
         {"width", d.width}, {"height", d.height}, {"dpi", d.dpi}, {"hdr", d.hdr}});
-    return {{"timestamp_ms", s.timestamp_ms}, {"target", {{"pid", s.target.pid}, {"name", s.target.name},
+    return {{"obs_state", s.obs_state}, {"timestamp_ms", s.timestamp_ms}, {"target", {{"pid", s.target.pid}, {"name", s.target.name},
         {"path", s.target.path}, {"foreground", s.target.foreground}}}, {"cpu", s.hardware.cpu},
         {"cpu_vendor", s.hardware.cpu_vendor}, {"logical_processors", s.hardware.logical_processors},
         {"gpus", devices}, {"displays", displays}, {"cpu_load", metric_json(s.cpu_load)}, {"cpu_clock", metric_json(s.cpu_clock)},

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $taskPrincipal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (!$taskPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Start-Process powershell.exe -Verb RunAs -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"') -WindowStyle Hidden
@@ -12,6 +12,9 @@ Get-Service GameGauge.Sensor -ErrorAction SilentlyContinue | Stop-Service -Force
 Get-Process GameGauge,GameGauge.Settings -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$taskDestination\*" } | Stop-Process
 Unregister-ScheduledTask -TaskName 'GameGauge.StartAfterInstall' -Confirm:$false -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表.lnk') -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '卸载游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) '游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'GameGauge.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GameGauge' -Recurse -ErrorAction SilentlyContinue
 # 保留用户历史，以及可能被其他程序使用的 PresentMon / PawnIO。

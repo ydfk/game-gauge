@@ -4,6 +4,7 @@
 #include "hud/overlay.h"
 #include "ipc_server.h"
 #include "updater.h"
+#include "obs.h"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -23,6 +24,7 @@ private:
     void update_config(Config config);
     void export_session();
     Config config() const;
+    Snapshot snapshot() const;
     HINSTANCE instance_{};
     HWND window_{};
     HICON icon_{};
@@ -31,6 +33,7 @@ private:
     Config config_;
     Sampler sampler_;
     Updater updater_;
+    ObsMonitor obs_;
     std::unique_ptr<Overlay> overlay_;
     std::unique_ptr<IpcServer> ipc_;
     std::atomic<bool> capture_requested_{};

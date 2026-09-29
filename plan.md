@@ -697,3 +697,7 @@ Use case: logo-brand. Create one original, polished logo concept for FrameEave, 
 ## 18. Tag 发布与自动更新
 
 增加 .github/workflows/release.yml；vX.Y.Z Tag 触发 Windows 构建/测试/官方依赖校验/版本化安装器/Release 草稿上传校验及公开发布。版本从 Tag 注入，仓库从 github.repository 注入。原生后台更新器支持默认六小时稳定版检查、手动下载/安装，以及用户开启后自动下载并在游戏退出后安装。保持 UAC 确认、HTTPS 和安装前后摘要核验，不降级，保留配置和历史。发布操作尚未执行；首次实际跨版本更新须在远端就绪并发布两个版本后验收。操作说明见 docs/releasing.md。
+
+## 19. OBS 与安装完善（0.1.2）
+
+新增真实 OBS 录制/暂停状态；设置随宿主退出，独立设置入口自动打开完整应用。安装器增加桌面及卸载快捷方式和中英文系统注册名。根目录 build.cmd / build.ps1 支持 Build、Run、Package；详见 README 和 docs/validation.md。

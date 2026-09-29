@@ -32,9 +32,9 @@ add_library(gauge_metrics STATIC
 target_include_directories(gauge_metrics PRIVATE third_party/presentmon)
 target_link_libraries(gauge_metrics PUBLIC gauge_common dxgi pdh psapi powrprof dwmapi)
 add_executable(GameGauge WIN32
-  src/host/main.cpp src/host/application.cpp src/host/ipc_server.cpp src/host/updater.cpp
+  src/host/main.cpp src/host/application.cpp src/host/ipc_server.cpp src/host/updater.cpp src/host/obs.cpp
   src/hud/overlay.cpp src/hud/renderer.cpp src/host/app.rc)
-target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dwmapi comctl32 winhttp bcrypt)
+target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dwmapi comctl32 winhttp bcrypt crypt32)
 target_link_options(GameGauge PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.Diagnostics src/diagnostics/main.cpp src/host/ipc_server.cpp)
 target_link_libraries(GameGauge.Diagnostics PRIVATE gauge_metrics)

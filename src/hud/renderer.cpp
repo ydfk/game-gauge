@@ -59,6 +59,13 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         previous_group = group;
         items.push_back(std::move(item));
     }
+    if (config.show_obs) {
+        const auto value = s.obs_state == "recording" ? L"● 录制中" : s.obs_state == "paused" ? L"Ⅱ 已暂停" :
+            s.obs_state == "idle" ? L"未录制" : s.obs_state == "disabled" ? L"未启用连接" : L"未连接";
+        const auto color = s.obs_state == "recording" ? D2D1::ColorF(1.f, .3f, .3f) :
+            s.obs_state == "paused" ? amber : D2D1::ColorF(.6f, .65f, .7f);
+        items.push_back({L"OBS", value, color, L"OBS"});
+    }
     return items;
 }
 namespace {

@@ -1,5 +1,6 @@
 #pragma once
 #include "common/config.h"
+#include "common/platform.h"
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wrl/client.h>
@@ -10,7 +11,7 @@
 namespace gauge {
 class SettingsWindow {
 public:
-    explicit SettingsWindow(HINSTANCE instance);
+    explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0);
     int run();
     void render_to_png(const std::wstring& path, int page = 0);
 private:
@@ -53,6 +54,7 @@ private:
     std::wstring metric_detail(const std::string& id) const;
     void add(D2D1_RECT_F rect, std::function<void(float)> click, std::function<void(int)> adjust = {});
     HINSTANCE instance_{};
+    UniqueHandle host_process_;
     HWND window_{};
     Microsoft::WRL::ComPtr<ID2D1Factory> factory_;
     Microsoft::WRL::ComPtr<ID2D1RenderTarget> target_;

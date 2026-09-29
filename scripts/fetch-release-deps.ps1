@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskDeps = Join-Path $taskRoot '.deps'
 New-Item -ItemType Directory -Path $taskDeps -Force | Out-Null

@@ -68,6 +68,8 @@ void SettingsWindow::appearance_page(float width) {
     for (int i = 0; i < 4; ++i) button(anchors[i], D2D1::RectF(left + i * (box + 12), 587, left + i * (box + 12) + box, 629),
         [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
     label(L"切换位置会立即更新预览；回到游戏后自动应用。", left, 649, span, 24, small_.Get(), muted);
+    toggle(L"OBS 录制状态", L"显示录制、暂停和连接状态", config_.show_obs,
+        D2D1::RectF(left, 685, right, 747), [this](float) { config_.show_obs = !config_.show_obs; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;

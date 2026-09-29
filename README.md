@@ -13,7 +13,9 @@ Windows 11 游戏内性能监控的原生 C++ 桌面程序。当前处于技术�
 
 ## 安装与使用
 
-运行 `GameGauge-0.1.0-Setup.exe`，同意 Windows 管理员提示即可。安装器内含经过哈希及签名校验的官方 PresentMon / PawnIO 安装程序和 AMD 温度模块，自动注册温度服务、创建开始菜单入口并启动普通权限主程序。运行库静态链接，无需额外安装 Visual C++ 运行库。已有采集依赖会保留。
+运行 `GameGauge-0.1.2-Setup.exe`，同意 Windows 管理员提示即可。安装器内含经过哈希及签名校验的官方 PresentMon / PawnIO 安装程序和 AMD 温度模块，自动注册温度服务并启动普通权限主程序。桌面及开始菜单均有“游戏仪表 GameGauge”快捷方式；可在 Windows“设置 → 应用 → 安装的应用”搜索 GameGauge 卸载，也可使用开始菜单的“卸载游戏仪表 GameGauge”。运行库静态链接，无需额外安装 Visual C++ 运行库。已有采集依赖会保留。
+
+OBS 状态标记默认开启，可在“外观”关闭。先在 OBS“工具 → WebSocket 服务器设置”启用服务器；程序会读取当前用户标准 OBS 安装的本机连接配置，支持密码验证，不保存密码。标记区分红色“录制中”、黄色“已暂停”、“未录制”与“未连接”；不会控制 OBS 录制。OBS 未启动或连接失败不会被误报为停止录制。便携 OBS 的自定义配置目录暂不支持。
 
 默认自动识别常见游戏目录、Unity/Unreal/Steam 引擎和无边框游戏，收到游戏帧后显示监控。普通窗口游戏也可识别；漏识别时在“游戏与排除”选择程序并记住。排除名单按进程文件名保存。切到桌面、最小化或游戏退出时监控条隐藏。
 
@@ -41,11 +43,14 @@ Tag 自动发布和软件更新使用方法见 [发布与更新](docs/releasing.
 在 Windows 11 x64、Visual Studio 2022 C++ 桌面工具和 Windows SDK 环境中运行：
 
 ```powershell
-./scripts/build-core.ps1
-./build/core/bin/Release/GameGauge.exe
+.\build.cmd                  # 编译 Release 并运行核心测试
+.\build.cmd -Task Run        # 编译后打开程序
+.\build.cmd -Task Package    # 自动下载校验依赖并生成完整安装包
 ```
 
-启动后打开设置窗口，关闭设置窗口时宿主程序留在托盘；再次双击主程序会重新打开设置窗口。快捷键为 `Ctrl+Alt+Shift+F6` 显示/隐藏、`F7` 编辑位置、`F8` 重置统计。`GameGauge.Diagnostics.exe --host-status` 输出采集与覆盖层诊断；`--targets` 列出当前可发现的窗口。
+也可在 PowerShell 使用 `./build.ps1`，参数相同。可选 `-Configuration Debug`（仅 Build/Run）、`-Version 0.1.2`、`-Repository owner/repo`。安装包位于 `build/package/GameGauge-版本-Setup.exe`，可执行文件位于 `build/core/bin/Release`。构建需要 VS 2022 的 C++ 桌面工具、Windows SDK 和 CMake 组件；首次打包需要网络，普通编译不下载驱动依赖。
+
+启动后打开设置窗口，关闭设置窗口时宿主程序留在托盘；再次双击主程序会重新打开设置窗口。托盘“退出”同时关闭设置及监控条，主程序意外终止后设置也会退出；单独启动设置程序会启动完整应用。快捷键为 `Ctrl+Alt+Shift+F6` 显示/隐藏、`F7` 编辑位置、`F8` 重置统计。`GameGauge.Diagnostics.exe --host-status` 输出采集与覆盖层诊断；`--targets` 列出当前可发现的窗口。
 
 编辑位置时拖动监控条，按 Enter 保存或 Esc 取消；也可从托盘菜单保存。生成便携包运行 `./scripts/package-portable.ps1`，产物位于 `build/package/`。该包是技术预览，已在一款真实游戏与 OBS 游戏采集中完成初步验证，其他采集方法和长期稳定性尚未通过。
 

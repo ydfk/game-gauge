@@ -60,6 +60,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     ipc_ = std::make_unique<IpcServer>([this](const Json& command) { return request(command); });
 }
 Application::~Application() {
+    if (auto settings = FindWindowW(L"GameGauge.Settings", nullptr)) PostMessageW(settings, WM_CLOSE, 0, 0);
     ipc_.reset(); overlay_.reset();
     for (int hotkey = 1; hotkey <= 3; ++hotkey) UnregisterHotKey(window_, hotkey);
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1; Shell_NotifyIconW(NIM_DELETE, &tray);
@@ -67,6 +68,7 @@ Application::~Application() {
     if (window_) DestroyWindow(window_);
 }
 Config Application::config() const { std::lock_guard lock(mutex_); return config_; }
+Snapshot Application::snapshot() const { auto result = sampler_.snapshot(); result.obs_state = obs_.state(); return result; }
 void Application::update_config(Config next) {
     save_config(data_dir() / L"config.json", next);
     { std::lock_guard lock(mutex_); config_ = next; }
@@ -86,7 +88,7 @@ void Application::settings() {
     if (!std::filesystem::exists(path)) {
         MessageBoxW(window_, L"尚未构建设置窗口。请运行 scripts/build-core.ps1。", L"游戏仪表", MB_OK | MB_ICONINFORMATION); return;
     }
-    const auto argument = L"--data-dir \"" + data_dir().wstring() + L"\"";
+    const auto argument = L"--host-pid " + std::to_wstring(GetCurrentProcessId()) + L" --data-dir \"" + data_dir().wstring() + L"\"";
     ShellExecuteW(window_, L"open", path.c_str(), argument.c_str(), executable_dir().c_str(), SW_SHOWNORMAL);
 }
 void Application::menu() {
@@ -116,11 +118,11 @@ Json Application::request(const Json& command) {
     const auto action = command.value("command", std::string("status"));
     if (action == "status") {
         std::lock_guard lock(mutex_);
-        const auto snapshot = sampler_.snapshot();
+        const auto snapshot = this->snapshot();
         Json preview = Json::array();
         for (const auto& item : hud_items(snapshot, config_)) preview.push_back({{"label", utf8(item.label)}, {"value", utf8(item.value)},
             {"group", utf8(item.group)}, {"color", {item.color.r, item.color.g, item.color.b}}});
-        return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(sampler_.snapshot())},
+        return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(snapshot)},
             {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
             {"warning", warning_}, {"hud_error", hud_error_}};
@@ -178,7 +180,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
                 }
                 self->overlay_->edit(false);
             }
-            self->overlay_->update(self->sampler_.snapshot(), self->config());
+            self->overlay_->update(self->snapshot(), self->config());
             self->capture_requested_ = self->overlay_->capture_requested(); self->capture_error_ = self->overlay_->capture_error();
             { std::lock_guard lock(self->mutex_); self->hud_error_ = self->overlay_->error(); }
             return 0;

@@ -31,7 +31,12 @@ float ui_scale(UINT dpi, const RECT& work) {
     return std::max(.75f, std::min({dpi / 96.f, 1.4f, width, height}));
 }
 }
-SettingsWindow::SettingsWindow(HINSTANCE instance) : instance_(instance) {
+SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid) : instance_(instance) {
+    if (host_pid) {
+        host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, host_pid));
+        if (!host_process_ || WaitForSingleObject(host_process_.value, 0) != WAIT_TIMEOUT)
+            throw std::runtime_error("游戏仪表主程序已退出");
+    }
     WNDCLASSEXW cls{sizeof(cls)};
     cls.hInstance = instance; cls.lpfnWndProc = procedure; cls.lpszClassName = L"GameGauge.Settings";
     cls.hIcon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON, 32, 32, LR_SHARED));
@@ -79,8 +84,12 @@ int SettingsWindow::run() {
     return static_cast<int>(message.wParam);
 }
 void SettingsWindow::refresh() {
+    if (host_process_ && WaitForSingleObject(host_process_.value, 0) == WAIT_OBJECT_0) {
+        DestroyWindow(window_); return;
+    }
     try {
         status_ = ipc_request({{"command", "status"}});
+        if (!host_process_) host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, status_.at("host_pid").get<DWORD>()));
         config_ = config_from_json(status_.at("config"));
         targets_ = ipc_request({{"command", "targets"}}).value("targets", Json::array());
         const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 4}, {"limit", 4}});

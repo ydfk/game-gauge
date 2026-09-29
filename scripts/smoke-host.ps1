@@ -1,4 +1,4 @@
-param([string]$BinPath)
+﻿param([string]$BinPath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskBin = if ($BinPath) { (Resolve-Path -LiteralPath $BinPath).Path } else { Join-Path $taskRoot 'build/core/bin/Release' }
@@ -39,11 +39,21 @@ try {
     if ($taskAfter.config.font_size -ne 17 -or $taskAfter.config.opacity -ne 0.75 -or
         (@($taskAfter.config.metrics) -join ',') -ne 'fps,gpu_load') { throw 'IPC 配置读回与提交不一致。' }
     if (!(Test-Path -LiteralPath (Join-Path $taskData 'config.json'))) { throw '配置没有保存到隔离测试目录。' }
+    & $taskDiagnostics --request '{"command":"settings"}' | Out-Null
+    $taskSettings = $null
+    for ($taskTry = 0; $taskTry -lt 30; $taskTry++) {
+        $taskSettings = Get-Process GameGauge.Settings -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $taskBin 'GameGauge.Settings.exe') } | Select-Object -First 1
+        if ($taskSettings) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (!$taskSettings) { throw '设置窗口没有随主程序启动' }
+    Start-Sleep -Milliseconds 1500
     & $taskDiagnostics --request '{"command":"quit"}' | Out-Null
     if ($LASTEXITCODE -ne 0 -or !$taskProcess.WaitForExit(5000) -or $taskProcess.ExitCode -ne 0) {
         throw 'IPC 退出未能正常关闭宿主。'
     }
-    Write-Host '宿主启动、连续 IPC、配置应用、持久化与正常退出：通过。'
+    if (!$taskSettings.WaitForExit(4000)) { throw '托盘退出后设置进程仍在运行' }
+    Write-Host '宿主启动、连续 IPC、配置应用、持久化、托盘退出同时关闭设置：通过。'
 } finally {
     if (!$taskProcess.HasExited) { Stop-Process -Id $taskProcess.Id -ErrorAction SilentlyContinue }
     $taskProcess.WaitForExit(2000) | Out-Null

@@ -49,6 +49,7 @@ struct Target {
     bool foreground{};
 };
 struct Snapshot {
+    std::string obs_state{"disconnected"};
     uint64_t timestamp_ms{};
     Target target;
     Hardware hardware;
@@ -65,6 +66,7 @@ struct Snapshot {
     std::string history_error;
 };
 struct Config {
+    bool show_obs{true};
     bool check_updates{true};
     bool auto_update{};
     bool enabled{true};

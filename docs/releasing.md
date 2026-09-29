@@ -39,8 +39,7 @@ git push origin v0.1.1
 ## 本地构建
 
 ```powershell
-./scripts/fetch-release-deps.ps1
-./scripts/package-setup.ps1 -Version 0.1.1 -Repository owner/repo
+.\build.cmd -Task Package -Version 0.1.2 -Repository owner/repo
 ```
 
 `owner/repo` 必须替换为实际公开发布仓库。省略时只生成没有在线更新源的本地构建，界面会说明尚未配置，而不是伪报“已是最新”。本地脚本不会上传或发布。
