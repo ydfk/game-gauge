@@ -683,3 +683,13 @@ OBS 官方说明窗口采集针对所选窗口，捕获方法可配置；本项�
 ```text
 Use case: logo-brand. Create one original, polished logo concept for FrameEave, Chinese name 帧檐, a premium lightweight Windows desktop gaming performance monitor. Asset: square app-logo concept, not a brand presentation sheet. Design one strong geometric abstract emblem that combines an architectural eave/top horizontal monitoring bar and the letter F, with a small deliberate gap suggesting a frame-time signal. Extremely simple bold silhouette, 2 or 3 solid geometric strokes, generous negative space, professional precision, easy to simplify for a 16px Windows tray icon. Center the emblem on a uniform deep graphite #11151B square background with generous padding. Emblem color cool mint #76E0C4 with a small off-white #EEF3F8 accent only if needed. Flat vector-like finish with crisp edges, balanced optical proportions. No gradients, glow, 3D, shadows, textures, mockups, borders, charts, computer illustrations, controllers, mascots, lettering, words or watermark. One single emblem only. This is an original brand concept, do not imitate GamePP or any existing brand.
 ```
+
+## 17. 2026-09-29 用户反馈实现（取代旧版对应决策）
+
+- 游戏内暂停继续呈现时采集真实 FPS；帧流连接但停止呈现时显示 0，短暂交付间断保留读数。
+- 监控绑定经确认的游戏进程及客户区；失焦、最小化和退出隐藏，不回退到桌面。
+- 常见游戏路径、引擎模块、窗口类与无边框特征自动识别；支持记住窗口化游戏和按进程名排除。
+- 设置收敛为外观、监控项目、游戏与排除、游戏历史；CPU/GPU 项分组，位置按钮直接修改锚点及零边距。
+- 每次游戏历史本地保存，前台采样时间加权 FPS、最高 FPS/温度、前台时长及结束状态；覆盖原先不长期保存的决定。
+- 原生单 EXE 安装器内置官方依赖，自动安装和启动温度服务，主程序保持普通权限；覆盖原先单独安装依赖的流程。
+- 当前已通过构建、核心/历史生命周期测试及页面渲染；完整安装、真实游戏暂停/退出及跨 DPI 验收仍待实机结果，不能视为全部完成。

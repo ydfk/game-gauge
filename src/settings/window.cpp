@@ -81,6 +81,9 @@ void SettingsWindow::refresh() {
         status_ = ipc_request({{"command", "status"}});
         config_ = config_from_json(status_.at("config"));
         targets_ = ipc_request({{"command", "targets"}}).value("targets", Json::array());
+        const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 4}, {"limit", 4}});
+        history_ = history.value("history", Json::array());
+        history_count_ = history.value("total", size_t{});
         error_.clear();
     } catch (const std::exception& e) { error_ = e.what(); }
     if (window_) InvalidateRect(window_, nullptr, FALSE);
@@ -215,7 +218,7 @@ void SettingsWindow::navigation(float width, float height) {
     line(52, 53, 59, 43, background, 2.5f);
     label(L"游戏仪表", 77, 35, 145, 27, heading_.Get(), white);
     label(L"GAMEGAUGE", 78, 61, 145, 18, small_.Get(), muted);
-    const wchar_t* names[]{L"总览", L"监控内容", L"设备与游戏", L"录制与诊断"};
+    const wchar_t* names[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史"};
     const wchar_t* symbols[]{L"01", L"02", L"03", L"04"};
     for (int i = 0; i < 4; ++i) {
         const float y = 132.f + i * 60;
@@ -227,7 +230,7 @@ void SettingsWindow::navigation(float width, float height) {
         });
     }
     line(28, height - 104, 208, height - 104, edge);
-    label(L"轻量 · 原生 C++ · Windows 11", 28, height - 81, 190, 20, small_.Get(), muted);
+    label(L"游戏仪表", 28, height - 81, 190, 20, small_.Get(), muted);
     label(error_.empty() ? L"主程序已连接" : L"主程序未连接", 28, height - 55, 180, 20,
         small_.Get(), error_.empty() ? mint : amber);
     fill(D2D1::RectF(236, 0, width, height), background);
@@ -236,14 +239,15 @@ void SettingsWindow::paint() {
     if (!target_) recreate_target();
     RECT client{}; GetClientRect(window_, &client);
     scale_ = ui_scale(GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
+    scale_ = std::max(.1f, std::min({scale_, client.right / 1164.f, client.bottom / 770.f}));
     const float width = client.right / scale_, height = client.bottom / scale_;
     hotspots_.clear();
     target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
     target_->Clear(background);
     navigation(width, height);
-    const wchar_t* page_titles[]{L"让游戏状态，一眼可见", L"监控内容", L"设备与游戏", L"录制与诊断"};
-    const wchar_t* page_subtitles[]{L"只显示有意义的数据，游戏时保持安静。", L"勾选想看的指标，并调整顶部显示顺序。",
-        L"自动发现硬件与游戏，也允许你精确指定。", L"查看采集来源、覆盖层状态与录制排除能力。"};
+    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史"};
+    const wchar_t* page_subtitles[]{L"调整监控条的样式和位置。", L"同类指标会在监控条中显示在一起。",
+        L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。"};
     label(page_titles[page_], 272, 35, width - 420, 43, title_.Get(), white);
     label(page_subtitles[page_], 273, 83, width - 340, 26, body_.Get(), muted);
     fill(D2D1::RectF(width - 165, 43, width - 28, 76), panel_high, 16);
@@ -251,10 +255,10 @@ void SettingsWindow::paint() {
         small_.Get(), error_.empty() ? mint : amber);
     line(272, 122, width - 28, 122, edge);
     switch (page_) {
-    case 0: overview(width); break;
-    case 1: metrics(width); break;
-    case 2: hardware(width); break;
-    case 3: capture(width); break;
+    case 0: appearance_page(width); break;
+    case 1: metrics_page(width); break;
+    case 2: games_page(width); break;
+    case 3: history_page(width); break;
     }
     if (!error_.empty()) label(L"连接提示：" + wide(error_), 274, height - 37, width - 310, 24, small_.Get(), amber);
     if (focused_ >= 0 && focused_ < static_cast<int>(hotspots_.size())) {

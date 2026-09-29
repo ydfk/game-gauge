@@ -3,6 +3,7 @@
 
 namespace gauge {
 inline constexpr wchar_t cpu_telemetry_name[] = L"Local\\GameGauge.CpuTemperature.v1";
+inline constexpr wchar_t cpu_service_telemetry_name[] = L"Global\\GameGauge.CpuTemperature.v1";
 inline constexpr DWORD cpu_telemetry_magic = 0x47474354;
 struct CpuTelemetryRecord {
     volatile LONG sequence{};

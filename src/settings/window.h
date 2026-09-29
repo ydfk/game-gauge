@@ -39,6 +39,11 @@ private:
     void metrics(float width);
     void hardware(float width);
     void capture(float width);
+    void appearance_page(float width);
+    void metrics_page(float width);
+    void games_page(float width);
+    void history_page(float width);
+    void choose_process(bool excluded);
     void metric_preview(float x, float y, float width);
     std::wstring metric_name(const std::string& id) const;
     std::wstring metric_value(const std::string& id) const;
@@ -52,12 +57,15 @@ private:
     Microsoft::WRL::ComPtr<IDWriteFactory> write_;
     Microsoft::WRL::ComPtr<IDWriteTextFormat> title_, heading_, body_, small_, mono_, button_format_;
     Json status_{Json::object()}, targets_{Json::array()};
+    Json history_{Json::array()};
     Config config_;
     std::vector<Hotspot> hotspots_;
     std::string error_;
     std::string selected_metric_;
     int page_{};
     size_t target_page_{};
+    size_t blacklist_page_{}, history_page_index_{};
+    size_t history_count_{};
     int focused_{-1};
     float scale_{1};
 };

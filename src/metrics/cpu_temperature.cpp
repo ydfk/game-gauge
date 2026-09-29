@@ -7,8 +7,9 @@ namespace gauge {
 Metric sample_cpu_temperature(const Hardware& hardware) {
     if (hardware.cpu_vendor != "AuthenticAMD")
         return missing(State::unsupported, "当前原生温度组件仅支持 AMD Zen", "PawnIO");
-    HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, cpu_telemetry_name);
-    if (!mapping) return missing(State::permission, "需要从设备页启动管理员 CPU 温度采集", "PawnIO · AMD Tctl");
+    HANDLE mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, cpu_service_telemetry_name);
+    if (!mapping) mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, cpu_telemetry_name);
+    if (!mapping) return missing(State::permission, "温度服务未运行，请使用安装版修复安装", "PawnIO · AMD Tctl");
     const auto* shared = static_cast<const CpuTelemetryRecord*>(MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, sizeof(CpuTelemetryRecord)));
     if (!shared) {
         CloseHandle(mapping);

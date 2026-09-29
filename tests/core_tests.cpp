@@ -1,5 +1,8 @@
 #include "common/config.h"
 #include "common/frame_statistics.h"
+#include "common/history.h"
+#include <fstream>
+#include <windows.h>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -46,6 +49,29 @@ int main() {
         snapshot.cpu_temperature = gauge::missing(gauge::State::unsupported, "not supported");
         const auto json = gauge::snapshot_json(snapshot);
         require(json["cpu_temperature"]["value"].is_null(), "missing sensors must not become zero");
-        std::cout << "8 core contracts passed\n"; return 0;
+        const auto directory = std::filesystem::temp_directory_path() / (L"GameGauge-history-test-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64()));
+        gauge::Snapshot game; game.target.pid = 123; game.target.started = 456;
+        game.target.name = "test.exe"; game.target.foreground = true; game.game_confirmed = true;
+        game.fps = gauge::available(60, "test");
+        { gauge::SessionHistory history(directory);
+          game.timestamp_ms = 1000; history.update(game, 10000, [](const auto&) { return true; });
+          game.timestamp_ms = 2000; history.update(game, 11000, [](const auto&) { return true; });
+          game.target.foreground = false; game.timestamp_ms = 3000;
+          history.update(game, 12000, [](const auto&) { return true; });
+          game.target.foreground = true; game.timestamp_ms = 20000;
+          history.update(game, 29000, [](const auto&) { return true; });
+          gauge::Snapshot desktop;
+          history.update(desktop, 30000, [](const auto&) { return false; }); }
+        auto rows = gauge::read_history(directory);
+        require(rows.size() == 1 && rows[0]["status"] == "completed", "game exit must complete one local session");
+        close(rows[0]["active_seconds"].get<double>(), 1, "background time must not inflate active time");
+        close(rows[0]["average_fps"].get<double>(), 60, "session FPS aggregation");
+        { gauge::SessionHistory history(directory); game.timestamp_ms = 30000;
+          history.update(game, 40000, [](const auto&) { return true; }); }
+        { gauge::SessionHistory recovery(directory); }
+        rows = gauge::read_history(directory);
+        require(rows.size() == 2 && rows[0]["status"] == "interrupted", "unclean shutdown must recover history");
+        std::filesystem::remove_all(directory);
+        std::cout << "Core and session lifecycle contracts passed\n"; return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

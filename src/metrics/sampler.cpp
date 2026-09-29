@@ -5,6 +5,7 @@
 #include "presentmon.h"
 #include "target.h"
 #include "common/platform.h"
+#include "common/history.h"
 #include <pdh.h>
 #include <pdhmsg.h>
 #include <psapi.h>
@@ -111,8 +112,10 @@ struct SystemCounters {
             s.selected_gpu = best->first; s.gpu_selection_reason = "Windows 游戏进程 3D 引擎 LUID";
         } else if (s.hardware.gpus.size() == 1) {
             s.selected_gpu = s.hardware.gpus.front().id; s.gpu_selection_reason = "唯一硬件适配器";
+        } else if (!s.selected_gpu.empty() && s.target.pid) {
+            s.gpu_selection_reason = "保留此游戏上次确认的 GPU";
         } else {
-            s.selected_gpu.clear(); s.gpu_selection_reason = "无法可靠确定游戏 GPU，可在设置中指定";
+            s.selected_gpu.clear(); s.gpu_selection_reason = "等待游戏 GPU 活动";
         }
     }
 };
@@ -130,6 +133,9 @@ void Sampler::run(std::stop_token stop) {
     PresentMonProvider presentmon;
     FrameStatistics statistics;
     SystemCounters counters;
+    std::unique_ptr<SessionHistory> history;
+    try { history = std::make_unique<SessionHistory>(data_dir() / L"history"); }
+    catch (const std::exception& error) { current.history_error = error.what(); }
     uint64_t last_hardware{}, last_session = GetTickCount64();
     bool was_paused{}, was_foreground{};
     while (!stop.stop_requested()) {
@@ -144,10 +150,11 @@ void Sampler::run(std::stop_token stop) {
         const bool target_changed = previous.pid != current.target.pid || previous.started != current.target.started;
         if (reset || target_changed) {
             statistics.reset(); presentmon.reset(); current.session_seconds = 0;
-        } else if (was_paused != config.paused) {
+            current.game_confirmed = false;
+            if (target_changed) current.selected_gpu.clear();
+            current.fps = current.frametime = current.low1 = current.low01 = missing(State::waiting, "等待游戏帧");
+        } else if (was_paused && !config.paused) {
             statistics.reset(); presentmon.reset();
-        } else if (was_foreground != current.target.foreground) {
-            statistics.reset();
         }
         current.timestamp_ms = GetTickCount64(); current.paused = config.paused;
         current.cpu_temperature = sample_cpu_temperature(current.hardware);
@@ -158,17 +165,23 @@ void Sampler::run(std::stop_token stop) {
             const bool active = current.target.pid != 0;
             const bool collecting = active && current.target.foreground;
             presentmon.poll(active ? current.target : Target{}, current, statistics, collecting);
+            current.timestamp_ms = GetTickCount64();
             statistics.publish(current, current.timestamp_ms);
+            if (active && (current.frame_samples >= 3 || !config.auto_target)) current.game_confirmed = true;
+            // 游戏菜单可能停止呈现；已确认且流仍连接时，零帧表示当前没有刷新。
+            if (collecting && current.game_confirmed && current.fps.state == State::waiting &&
+                presentmon.status().starts_with("PresentMon 已连接"))
+                current.fps = available(0, "PresentMon · 当前没有新呈现帧");
             if (collecting && was_foreground && !was_paused && !target_changed)
                 current.session_seconds += (current.timestamp_ms - last_session) / 1000.0;
             current.frame_status = presentmon.status();
             if (active && !collecting) current.frame_status += " · 游戏已失焦，统计暂停";
         } else {
-            current.frame_status = "采集已暂停";
-            current.fps = current.frametime = current.low1 = current.low01 = missing(State::stale, "采集已暂停");
-            current.frame_samples = 0;
-            current.recent_frames.clear();
+            current.frame_status = "采集已暂停 · 保留最后读数";
         }
+        if (history) try {
+            history->update(current, wall_time_ms(), target_alive); current.history_error.clear();
+        } catch (const std::exception& error) { current.history_error = error.what(); }
         last_session = current.timestamp_ms; was_paused = config.paused; was_foreground = current.target.foreground;
         {
             std::lock_guard lock(mutex_); snapshot_ = current;
@@ -176,5 +189,6 @@ void Sampler::run(std::stop_token stop) {
         std::unique_lock lock(mutex_);
         wake_.wait_for(lock, std::chrono::milliseconds(current.target.pid || config.preview ? config.refresh_ms : 1000));
     }
+    if (history) try { history->finish_all(wall_time_ms()); } catch (...) {}
 }
 }

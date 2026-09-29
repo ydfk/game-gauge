@@ -1,6 +1,7 @@
 #include <windows.h>
 #include "common/cpu_telemetry.h"
 #include <bcrypt.h>
+#include <sddl.h>
 #include <intrin.h>
 #include <array>
 #include <filesystem>
@@ -135,19 +136,26 @@ double tctl_celsius(unsigned long long raw) {
     if (celsius < 0 || celsius > 130) throw std::runtime_error("温度原始值超出合理范围");
     return celsius;
 }
-void serve(const std::vector<unsigned char>& blob, DWORD host_pid) {
-    HANDLE host = OpenProcess(SYNCHRONIZE, FALSE, host_pid);
+void serve(const std::vector<unsigned char>& blob, DWORD host_pid, HANDLE stop = nullptr) {
+    HANDLE host = stop ? stop : OpenProcess(SYNCHRONIZE, FALSE, host_pid);
     if (!host) throw std::runtime_error("无法绑定 GameGauge 宿主进程");
-    HANDLE mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0,
-        sizeof(gauge::CpuTelemetryRecord), gauge::cpu_telemetry_name);
-    if (!mapping || GetLastError() == ERROR_ALREADY_EXISTS) {
+    PSECURITY_DESCRIPTOR descriptor{};
+    if (stop && !ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GR;;;IU)", SDDL_REVISION_1, &descriptor, nullptr))
+        throw std::runtime_error("无法设置温度共享数据权限");
+    SECURITY_ATTRIBUTES security{sizeof(security), descriptor, FALSE};
+    HANDLE mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, stop ? &security : nullptr, PAGE_READWRITE, 0,
+        sizeof(gauge::CpuTelemetryRecord), stop ? gauge::cpu_service_telemetry_name : gauge::cpu_telemetry_name);
+    const DWORD mapping_error = GetLastError();
+    if (descriptor) LocalFree(descriptor);
+    if (!mapping || mapping_error == ERROR_ALREADY_EXISTS) {
         if (mapping) CloseHandle(mapping);
-        CloseHandle(host);
+        if (!stop) CloseHandle(host);
         throw std::runtime_error("CPU 温度采集已运行或无法创建共享数据");
     }
     auto* shared = static_cast<gauge::CpuTelemetryRecord*>(MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0,
         sizeof(gauge::CpuTelemetryRecord)));
-    if (!shared) { CloseHandle(mapping); CloseHandle(host); throw std::runtime_error("无法映射 CPU 温度数据"); }
+    if (!shared) { CloseHandle(mapping); if (!stop) CloseHandle(host); throw std::runtime_error("无法映射 CPU 温度数据"); }
     shared->magic = gauge::cpu_telemetry_magic;
     shared->process_id = GetCurrentProcessId();
     while (WaitForSingleObject(host, 0) == WAIT_TIMEOUT) {
@@ -166,12 +174,45 @@ void serve(const std::vector<unsigned char>& blob, DWORD host_pid) {
     }
     UnmapViewOfFile(shared);
     CloseHandle(mapping);
-    CloseHandle(host);
+    if (!stop) CloseHandle(host);
+}
+SERVICE_STATUS_HANDLE service_handle{};
+HANDLE service_stop{};
+void service_status(DWORD state, DWORD error = NO_ERROR) {
+    SERVICE_STATUS status{}; status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+    status.dwCurrentState = state; status.dwWin32ExitCode = error;
+    status.dwControlsAccepted = state == SERVICE_RUNNING ? SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN : 0;
+    SetServiceStatus(service_handle, &status);
+}
+void WINAPI service_control(DWORD control) {
+    if (control == SERVICE_CONTROL_STOP || control == SERVICE_CONTROL_SHUTDOWN) {
+        service_status(SERVICE_STOP_PENDING); SetEvent(service_stop);
+    }
+}
+void WINAPI service_main(DWORD, wchar_t**) {
+    service_handle = RegisterServiceCtrlHandlerW(L"GameGauge.Sensor", service_control);
+    if (!service_handle) return;
+    service_status(SERVICE_START_PENDING);
+    service_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    DWORD error = NO_ERROR;
+    try {
+        if (!service_stop) throw std::runtime_error("无法创建停止事件");
+        wchar_t executable[32768]{}; GetModuleFileNameW(nullptr, executable, 32768);
+        cpu_id();
+        const auto blob = verified_module(std::filesystem::path(executable).parent_path() / L".deps" / L"AMDFamily17-0.2.11.bin");
+        service_status(SERVICE_RUNNING); serve(blob, 0, service_stop);
+    } catch (...) { error = ERROR_SERVICE_SPECIFIC_ERROR; }
+    if (service_stop) CloseHandle(service_stop);
+    service_status(SERVICE_STOPPED, error);
 }
 }
 
 int wmain(int argc, wchar_t** argv) {
     SetConsoleOutputCP(CP_UTF8);
+    if (argc == 2 && std::wstring_view(argv[1]) == L"--service") {
+        SERVICE_TABLE_ENTRYW table[] = {{const_cast<wchar_t*>(L"GameGauge.Sensor"), service_main}, {nullptr, nullptr}};
+        return StartServiceCtrlDispatcherW(table) ? 0 : static_cast<int>(GetLastError());
+    }
     try {
         if (argc != 2 && (argc != 4 || std::wstring_view(argv[1]) != L"--serve"))
             throw std::runtime_error("用法：GameGauge.CpuProbe.exe [--serve <模块路径> <宿主 PID>] <官方模块路径>");

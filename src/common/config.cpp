@@ -32,7 +32,7 @@ Config config_from_json(const Json& json) {
     config.opacity = json.value("opacity", 0.86);
     if (!std::isfinite(config.font_size) || !std::isfinite(config.opacity)) throw std::runtime_error("配置中有无效数值");
     config.font_size = std::clamp(config.font_size, 10.0, 32.0);
-    config.opacity = std::clamp(config.opacity, 0.1, 1.0);
+    config.opacity = std::clamp(config.opacity, 0.0, 1.0);
     config.anchor = std::clamp(json.value("anchor", 0), 0, 3);
     config.margin_x = std::clamp(json.value("margin_x", 12), 0, 2000);
     config.margin_y = std::clamp(json.value("margin_y", 0), 0, 2000);
@@ -47,7 +47,17 @@ Config config_from_json(const Json& json) {
         if (config.metrics.empty()) config.metrics.push_back("fps");
     }
     config.ignored_processes = json.value("ignored_processes", std::vector<std::string>{});
+    const auto group = [](const std::string& id) {
+        if (id.starts_with("cpu_") || id == "process_cpu") return 1;
+        if (id.starts_with("gpu_") || id == "vram") return 2;
+        if (id.starts_with("memory_") || id == "process_memory") return 3;
+        if (id == "session") return 4;
+        return 0;
+    };
+    std::stable_sort(config.metrics.begin(), config.metrics.end(), [&](const auto& a, const auto& b) { return group(a) < group(b); });
+    config.known_games = json.value("known_games", std::vector<std::string>{});
     if (config.ignored_processes.size() > 128) throw std::runtime_error("忽略列表过长");
+    if (config.known_games.size() > 512) throw std::runtime_error("游戏列表过长");
     return config;
 }
 Json config_json(const Config& c) {
@@ -55,7 +65,7 @@ Json config_json(const Config& c) {
         {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
         {"target_pid", c.target_pid}, {"refresh_ms", c.refresh_ms}, {"font_size", c.font_size}, {"opacity", c.opacity},
         {"anchor", c.anchor}, {"margin_x", c.margin_x}, {"margin_y", c.margin_y}, {"gpu_id", c.gpu_id},
-        {"metrics", c.metrics}, {"ignored_processes", c.ignored_processes}};
+        {"metrics", c.metrics}, {"ignored_processes", c.ignored_processes}, {"known_games", c.known_games}};
 }
 Config load_config(const std::filesystem::path& path, std::string& warning) {
     if (!std::filesystem::exists(path)) return {};
@@ -101,6 +111,6 @@ Json snapshot_json(const Snapshot& s) {
         {"fps", metric_json(s.fps)}, {"frametime", metric_json(s.frametime)}, {"low1", metric_json(s.low1)},
         {"low01", metric_json(s.low01)}, {"frame_samples", s.frame_samples}, {"session_seconds", s.session_seconds},
         {"recent_frames", s.recent_frames}, {"frame_status", s.frame_status}, {"selected_gpu", s.selected_gpu},
-        {"gpu_selection_reason", s.gpu_selection_reason}, {"paused", s.paused}};
+        {"gpu_selection_reason", s.gpu_selection_reason}, {"paused", s.paused}, {"game_confirmed", s.game_confirmed}, {"history_error", s.history_error}};
 }
 }

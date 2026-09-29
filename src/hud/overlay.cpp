@@ -40,14 +40,18 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         capture_error_ = capture_requested_ ? 0 : GetLastError();
     }
     const auto target = reinterpret_cast<HWND>(snapshot.target.window);
-    const bool real_target = target && IsWindow(target) && !IsIconic(target) &&
-        (!config.hide_on_blur || snapshot.target.foreground) && (!config.auto_target || snapshot.fps.state == State::valid);
-    if ((!config.enabled && !editing_) || (!config.preview && !real_target && !editing_)) { ShowWindow(window_, SW_HIDE); return; }
+    DWORD target_pid{};
+    if (target) GetWindowThreadProcessId(target, &target_pid);
+    const bool real_target = target && IsWindow(target) && target_pid == snapshot.target.pid &&
+        !IsIconic(target) && snapshot.game_confirmed;
+    // 编辑也必须依附仍然存在的游戏，退出游戏后绝不回退到桌面。
+    if (!real_target || (!config.enabled && !editing_) || (!snapshot.target.foreground && !editing_)) {
+        if (!real_target && editing_) edit(false);
+        ShowWindow(window_, SW_HIDE); return;
+    }
     RECT bounds{};
     UINT dpi = 96;
-    if (editing_ && bounds_.right > bounds_.left && bounds_.bottom > bounds_.top) {
-        bounds = bounds_; dpi = GetDpiForWindow(window_);
-    } else if (target && IsWindow(target)) {
+    if (target && IsWindow(target)) {
         GetClientRect(target, &bounds);
         POINT origin{}; ClientToScreen(target, &origin); OffsetRect(&bounds, origin.x, origin.y);
         dpi = GetDpiForWindow(target);
@@ -63,13 +67,14 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         auto size = renderer_->measure(snapshot, config, dpi);
         // 初版以窗口边界裁剪，保证长条不会越到另一块屏幕。
         size.cx = std::min(size.cx, bounds.right - bounds.left);
-        // 旧版本把 8 像素写入默认配置；将该默认值视作贴顶。
         const int x_margin = MulDiv(config.margin_x, dpi, 96);
-        const int y_margin = MulDiv(config.margin_y == 8 ? 0 : config.margin_y, dpi, 96);
+        const int y_margin = MulDiv(config.margin_y, dpi, 96);
         int x = bounds.left + (bounds.right - bounds.left - size.cx) / 2;
         if (config.anchor == 1) x = bounds.left + x_margin;
         else if (config.anchor == 2) x = bounds.right - size.cx - x_margin;
         int y = config.anchor == 3 ? bounds.bottom - size.cy - y_margin : bounds.top + y_margin;
+        x = std::clamp<LONG>(x, bounds.left, std::max(bounds.left, bounds.right - size.cx));
+        y = std::clamp<LONG>(y, bounds.top, std::max(bounds.top, bounds.bottom - size.cy));
         if (!editing_ || !edit_placed_) {
             SetWindowPos(window_, HWND_TOPMOST, x, y, size.cx, size.cy, SWP_NOACTIVATE);
             if (editing_) edit_placed_ = true;

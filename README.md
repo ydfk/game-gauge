@@ -11,7 +11,17 @@ Windows 11 游戏内性能监控的原生 C++ 桌面程序。当前处于技术�
 - 请求 Windows 排除窗口捕获，并把“系统接受请求”和“OBS 实际验证”分开显示。
 - 监控内容、顺序、位置、字号、透明度、设备与游戏目标设置。
 
-## 便携包运行
+## 安装与使用
+
+运行 `GameGauge-0.1.0-Setup.exe`，同意 Windows 管理员提示即可。安装器内含经过哈希及签名校验的官方 PresentMon / PawnIO 安装程序和 AMD 温度模块，自动注册温度服务、创建开始菜单入口并启动普通权限主程序。运行库静态链接，无需额外安装 Visual C++ 运行库。已有采集依赖会保留。
+
+默认自动识别常见游戏目录、Unity/Unreal/Steam 引擎和无边框游戏，收到游戏帧后显示监控。普通窗口游戏也可识别；漏识别时在“游戏与排除”选择程序并记住。排除名单按进程文件名保存。切到桌面、最小化或游戏退出时监控条隐藏。
+
+设置仅保留外观、按 CPU/GPU 分组的监控项目、游戏与排除、游戏历史。位置按钮直接生效于游戏客户区；顶部默认零边距。每次游戏记录保存在 `%LOCALAPPDATA%\GameGauge\history`，每五秒写入，退出后保留。平均 FPS 是前台采样时间加权均值。游戏菜单继续呈现时显示实时 FPS；已确认游戏停止呈现时短暂保留后显示 0 FPS，而不是缺失值。
+
+温度服务当前支持 AMD Zen（family 0x17–0x1a），不把其他传感器读数冒充 CPU 温度。服务只发布温度，普通用户仅有读取权限。卸载保留用户配置、历史及共享的第三方依赖。
+
+## 开发用便携包
 
 解压 `GameGauge-0.1.0-win-x64.zip` 后，双击 `GameGauge.exe`。程序驻留在系统托盘；左键托盘图标打开设置，右键打开菜单。首次运行会在当前用户目录保存配置。默认自动寻找前台无边框大窗口；普通窗口化游戏可在“设备与游戏”中手动选定。没有帧采集服务时，FPS 显示为不可用，仍可预览界面和查看其他可用指标。
 
@@ -44,7 +54,7 @@ FPS 依赖 Intel PresentMon Shared Service。当前工程不会在启动时静�
 `GameGauge.Diagnostics.exe --presentmon-probe <游戏 PID> --sample-ms 10000` 可检查原始帧与有效帧数量。
 游戏 PID 可先通过 `GameGauge.Diagnostics.exe --targets` 查找。
 
-`GameGauge.CpuProbe.exe` 已随便携包提供。PawnIO 驱动需单独安装，官方 AMD 模块不在仓库和便携包内；从 [PawnIO.Modules 官方 0.2.11 发行版](https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.11)取得 `AMDFamily17.bin`，在项目根目录或便携包目录的 `.deps` 文件夹中命名为 `AMDFamily17-0.2.11.bin`。设置页“设备与游戏 → 启动温度采集”会请求管理员权限，启动独立传感器进程；主程序仍以普通权限运行。传感器每秒读取一次 AMD Tctl，主程序只读取该进程发布的温度，退出主程序后传感器自动退出。探针内置官方模块 SHA-256 校验，只读取 SMN 温度寄存器。单次诊断命令：
+开发用便携包保留 `GameGauge.CpuProbe.exe` 单次诊断入口；正式安装版自动运行 `GameGauge.Sensor` 服务，不需要手动启动探针。源码构建的探针要求 `.deps/AMDFamily17-0.2.11.bin`，并校验官方模块 SHA-256。单次诊断命令：
 
 ```powershell
 ./build/core/bin/Release/GameGauge.CpuProbe.exe ./.deps/AMDFamily17-0.2.11.bin
@@ -54,10 +64,10 @@ FPS 依赖 Intel PresentMon Shared Service。当前工程不会在启动时静�
 
 ## 当前限制
 
-- CPU 温度已通过隔离的原生传感器进程接入宿主，在本机短时实测有效；用户需单独安装 PawnIO、放置官方模块并在设置中启动。长时间稳定性、温度对照与跨型号支持仍待验收。本机 PresentMon 2.6.0 的能力目录将 `cpu_temperature` 标为 `not_implemented_by_presentmon`；不会把 ACPI 热区温度冒充 CPU 温度。
+- CPU 温度已接入安装器管理的服务；原有独立进程在本机实测有效。新服务的实机安装验收、长时间稳定性、温度对照与跨型号支持仍待验证。
 - 当前机器的 PresentMon 服务已在《控制：共振》取得真实有效帧；内置隐藏 DX11 测试窗口没有可读帧。1%/0.1% Low 的游戏内精度、跨游戏兼容性仍待验收。
 - 用户已确认无边框与全屏模式下玩家屏幕可见 HUD，OBS 游戏采集录屏中无 HUD；本项目尚未独立检查录制文件画面。OBS 窗口/显示器采集、受保护游戏与反作弊环境仍待验收。
-- 设置页已可鼠标与基本键盘操作，读屏支持、较小屏幕适配、每游戏配置、安装包和长期稳定性测试仍待完成。
+- 新设置页已经渲染验证；读屏支持、跨显示器 DPI 切换、每游戏独立外观配置及长期稳定性仍待验证。自动识别采用启发式，不能保证覆盖所有游戏。
 
 第三方来源和许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 游戏、双屏 HDR 与 OBS 的逐项检查见 [实机验收记录](docs/validation.md)。

@@ -1,6 +1,7 @@
 #include "application.h"
 #include "common/platform.h"
 #include "metrics/target.h"
+#include "common/history.h"
 #include <commctrl.h>
 #include <fstream>
 #include <format>
@@ -114,8 +115,16 @@ Json Application::request(const Json& command) {
     if (action == "apply") { update_config(config_from_json(command.at("config"))); return {{"ok", true}}; }
     if (action == "targets") {
         Json targets = Json::array();
-        for (const auto& target : enumerate_targets()) targets.push_back({{"pid", target.pid}, {"name", target.name}, {"foreground", target.foreground}});
+        for (const auto& target : enumerate_targets()) targets.push_back({{"pid", target.pid}, {"name", target.name}, {"path", target.path}, {"foreground", target.foreground}});
         return {{"ok", true}, {"targets", targets}};
+    }
+    if (action == "history") {
+        const auto rows = read_history(data_dir() / L"history");
+        const auto offset = std::min(command.value("offset", size_t{}), rows.size());
+        const auto count = std::clamp(command.value("limit", size_t{4}), size_t{1}, size_t{32});
+        Json page = Json::array();
+        for (size_t i = offset; i < std::min(rows.size(), offset + count); ++i) page.push_back(rows[i]);
+        return {{"ok", true}, {"total", rows.size()}, {"history", page}};
     }
     if (action == "reset") sampler_.reset_statistics();
     else if (action == "rediscover") sampler_.refresh_hardware();

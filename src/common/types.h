@@ -61,6 +61,8 @@ struct Snapshot {
     std::string selected_gpu;
     std::string gpu_selection_reason;
     bool paused{};
+    bool game_confirmed{};
+    std::string history_error;
 };
 struct Config {
     bool enabled{true};
@@ -79,5 +81,6 @@ struct Config {
     std::string gpu_id;
     std::vector<std::string> metrics{"fps", "cpu_temperature", "cpu_load", "gpu_temperature", "gpu_load", "vram", "memory_load", "session"};
     std::vector<std::string> ignored_processes;
+    std::vector<std::string> known_games;
 };
 }

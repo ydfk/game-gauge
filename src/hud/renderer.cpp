@@ -42,7 +42,7 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         else if (id == "vram") {
             item.label = L"显存";
             if (gpu != s.hardware.gpus.end() && gpu->memory_used.value && gpu->memory_total.value)
-                item.value = std::format(L"{:.1f}/{:.1f} GiB", *gpu->memory_used.value / 1073741824.0, *gpu->memory_total.value / 1073741824.0);
+                item.value = std::format(L"{:.1f}/{:.0f}G", *gpu->memory_used.value / 1073741824.0, *gpu->memory_total.value / 1073741824.0);
             else item.value = L"—";
         }
         else if (id == "memory_load") { item.label = L"内存"; item.value = number(s.memory_load, L"%"); item.color = green; }
@@ -97,12 +97,12 @@ float Renderer::text_width(const std::wstring& text) {
 }
 SIZE Renderer::measure(const Snapshot& s, const Config& config, UINT dpi) {
     prepare_format(static_cast<float>(config.font_size));
-    float width = 12;
+    float width = 6;
     for (const auto& item : hud_items(s, config)) {
-        if (!item.label.empty()) width += text_width(item.label) + 3;
-        width += std::max(text_width(item.value), static_cast<float>(config.font_size * 1.9)) + 7;
+        if (!item.label.empty()) width += text_width(item.label) + 2;
+        width += text_width(item.value) + 5;
     }
-    const float height = static_cast<float>(config.font_size * 1.5 + 6 + (config.graph ? 40 : 0));
+    const float height = static_cast<float>(config.font_size * 1.35 + 2 + (config.graph ? 40 : 0));
     return {static_cast<LONG>(std::ceil(width * dpi / 96)), static_cast<LONG>(std::ceil(height * dpi / 96))};
 }
 void Renderer::resize(UINT width, UINT height) {
@@ -125,19 +125,19 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     check(context_->CreateSolidColorBrush(D2D1::ColorF(.025f, .035f, .05f, static_cast<float>(config.opacity)), &brush));
     context_->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3, 3), brush.Get());
-    float x = 6;
-    const float text_bottom = static_cast<float>(config.font_size * 1.5 + 6);
+    float x = 3;
+    const float text_bottom = static_cast<float>(config.font_size * 1.35 + 2);
     for (const auto& item : hud_items(s, config)) {
         if (!item.label.empty()) {
             brush->SetColor(D2D1::ColorF(.88f, .9f, .94f));
             const float w = text_width(item.label);
-            context_->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), format_.Get(), D2D1::RectF(x, 3, x + w + 2, text_bottom), brush.Get());
-            x += w + 3;
+            context_->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), format_.Get(), D2D1::RectF(x, 0, x + w + 2, text_bottom), brush.Get());
+            x += w + 2;
         }
         brush->SetColor(item.color);
-        const float w = std::max(text_width(item.value), static_cast<float>(config.font_size * 1.9));
-        context_->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format_.Get(), D2D1::RectF(x, 3, x + w + 2, text_bottom), brush.Get());
-        x += w + 7;
+        const float w = text_width(item.value);
+        context_->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format_.Get(), D2D1::RectF(x, 0, x + w + 2, text_bottom), brush.Get());
+        x += w + 5;
     }
     if (config.graph && s.recent_frames.size() > 1) {
         brush->SetColor(D2D1::ColorF(.34f, .76f, 1.f));
