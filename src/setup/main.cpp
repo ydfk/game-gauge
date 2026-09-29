@@ -78,6 +78,13 @@ LRESULT CALLBACK procedure(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // 已完成的旧安装窗口不应挡住下一次更新；进行中的安装仍保持互斥。
+    if (auto previous = FindWindowW(L"GameGauge.Installer", nullptr)) {
+        if (IsWindowEnabled(GetDlgItem(previous, 1))) {
+            SendMessageW(previous, WM_CLOSE, 0, 0);
+            for (int i = 0; i < 30 && IsWindow(previous); ++i) Sleep(50);
+        }
+    }
     const auto installation = CreateMutexW(nullptr, FALSE, L"Global\\GameGauge.Setup");
     if (!installation) return 1;
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
