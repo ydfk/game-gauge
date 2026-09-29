@@ -19,6 +19,8 @@ Json metric_json(const Metric& metric) {
 Config config_from_json(const Json& json) {
     if (!json.is_object() || json.value("version", 1) != 1) throw std::runtime_error("不支持的配置版本");
     Config config;
+    config.check_updates = json.value("check_updates", true);
+    config.auto_update = json.value("auto_update", false);
     config.enabled = json.value("enabled", true);
     config.paused = json.value("paused", false);
     config.exclude_capture = json.value("exclude_capture", true);
@@ -61,7 +63,7 @@ Config config_from_json(const Json& json) {
     return config;
 }
 Json config_json(const Config& c) {
-    return {{"version", 1}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
+    return {{"version", 1}, {"check_updates", c.check_updates}, {"auto_update", c.auto_update}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
         {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
         {"target_pid", c.target_pid}, {"refresh_ms", c.refresh_ms}, {"font_size", c.font_size}, {"opacity", c.opacity},
         {"anchor", c.anchor}, {"margin_x", c.margin_x}, {"margin_y", c.margin_y}, {"gpu_id", c.gpu_id},

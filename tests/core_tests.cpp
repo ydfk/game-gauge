@@ -1,6 +1,7 @@
 #include "common/config.h"
 #include "common/frame_statistics.h"
 #include "common/history.h"
+#include "common/update_release.h"
 #include <fstream>
 #include <windows.h>
 #include <cmath>
@@ -72,6 +73,21 @@ int main() {
         rows = gauge::read_history(directory);
         require(rows.size() == 2 && rows[0]["status"] == "interrupted", "unclean shutdown must recover history");
         std::filesystem::remove_all(directory);
-        std::cout << "Core and session lifecycle contracts passed\n"; return 0;
+        const std::string repository = "example/GameGauge";
+        gauge::Json release = {{"draft", false}, {"prerelease", false}, {"tag_name", "v1.10.0"}, {"assets", gauge::Json::array({{
+            {"name", "GameGauge-1.10.0-Setup.exe"}, {"browser_download_url", "https://github.com/example/GameGauge/releases/download/v1.10.0/GameGauge-1.10.0-Setup.exe"},
+            {"size", 123}, {"digest", "sha256:" + std::string(64, 'a')}}})}};
+        require(gauge::select_update(release, repository, "1.9.0")["state"] == "available", "version comparison must be numeric");
+        require(gauge::select_update(release, repository, "2.0.0")["state"] == "current", "updater must never downgrade");
+        const auto rejects_release = [&](gauge::Json invalid) { try { gauge::select_update(invalid, repository, "1.0.0"); return false; } catch (...) { return true; } };
+        auto invalid = release; invalid["assets"][0]["browser_download_url"] = "https://example.com/update.exe";
+        require(rejects_release(invalid), "foreign update URLs must be rejected");
+        invalid = release; invalid["assets"][0]["digest"] = "sha256:bad";
+        require(rejects_release(invalid), "missing or malformed digest must be rejected");
+        invalid = release; invalid["prerelease"] = true;
+        require(rejects_release(invalid), "prerelease must not enter stable update channel");
+        invalid = release; invalid["tag_name"] = "v1.2.3/../bad";
+        require(rejects_release(invalid), "unsafe version names must be rejected");
+        std::cout << "Core, session lifecycle and update contracts passed\n"; return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

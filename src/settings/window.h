@@ -43,6 +43,7 @@ private:
     void metrics_page(float width);
     void games_page(float width);
     void history_page(float width);
+    void updates_page(float width);
     void list_surface(D2D1_RECT_F rect, bool selected = false);
     void page_buttons(float right, float y, size_t& page, size_t pages, bool reload = false);
     void choose_process(bool excluded);

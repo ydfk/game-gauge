@@ -1,8 +1,11 @@
+param([string]$Version)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+if (!$Version) { $Version = (Get-Content -LiteralPath "$taskRoot/VERSION" -Raw).Trim() }
+if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw '版本格式不正确' }
 $taskBin = Join-Path $taskRoot 'build/core/bin/Release'
 $taskPackage = Join-Path $taskRoot ('build/package/.staging-' + [guid]::NewGuid().ToString('N'))
-$taskZip = Join-Path $taskRoot 'build/package/GameGauge-0.1.0-win-x64.zip'
+$taskZip = Join-Path $taskRoot "build/package/GameGauge-$Version-win-x64.zip"
 
 New-Item -ItemType Directory -Path $taskPackage -Force | Out-Null
 foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe', 'GameGauge.CpuProbe.exe')) {
@@ -24,7 +27,7 @@ Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/install-presentmon.ps1') -D
 Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/nlohmann/LICENSE.MIT') -Destination (Join-Path $taskPackage 'licenses/nlohmann-json-MIT.txt') -Force
 Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/presentmon/LICENSE.txt') -Destination (Join-Path $taskPackage 'licenses/PresentMon-SDK-MIT.txt') -Force
 
-$taskManifest = [ordered]@{version='0.1.0';platform='Windows 11 x64';presentmon_service='separate signed Intel installation';files=@()}
+$taskManifest = [ordered]@{version=$Version;platform='Windows 11 x64';presentmon_service='separate signed Intel installation';files=@()}
 foreach ($taskName in @('GameGauge.exe', 'GameGauge.Settings.exe', 'GameGauge.Diagnostics.exe', 'GameGauge.CpuProbe.exe')) {
     $taskFile = Join-Path $taskPackage $taskName
     $taskManifest.files += [ordered]@{name=$taskName;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $taskFile).Hash;bytes=(Get-Item $taskFile).Length}

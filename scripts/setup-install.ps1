@@ -4,6 +4,7 @@ try {
     $taskPayload = Join-Path $PSScriptRoot 'payload'
     Expand-Archive -LiteralPath (Join-Path $PSScriptRoot 'payload.zip') -DestinationPath $taskPayload -Force
     $taskDestination = Join-Path $env:ProgramFiles 'GameGauge'
+    $taskRelease = Get-Content -LiteralPath (Join-Path $taskPayload 'app/release.json') -Raw | ConvertFrom-Json
     # 安装目录固定，服务程序不从用户可写目录运行。
     New-Item -ItemType Directory -Path $taskDestination -Force | Out-Null
     if ((Get-Item -LiteralPath $taskDestination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '安装目录不能是重解析点' }
@@ -36,7 +37,7 @@ try {
     $taskRegistry = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GameGauge'
     New-Item $taskRegistry -Force | Out-Null
     $taskUninstall = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $taskDestination 'scripts/setup-uninstall.ps1') + '"'
-    @{DisplayName='游戏仪表';DisplayVersion='0.1.0';Publisher='GameGauge';InstallLocation=$taskDestination;UninstallString=$taskUninstall;DisplayIcon=$taskShortcut.TargetPath}.GetEnumerator() | ForEach-Object { New-ItemProperty $taskRegistry -Name $_.Key -Value $_.Value -Force | Out-Null }
+    @{DisplayName='游戏仪表';DisplayVersion=$taskRelease.version;Publisher='GameGauge';InstallLocation=$taskDestination;UninstallString=$taskUninstall;DisplayIcon=$taskShortcut.TargetPath}.GetEnumerator() | ForEach-Object { New-ItemProperty $taskRegistry -Name $_.Key -Value $_.Value -Force | Out-Null }
     # 通过交互用户的普通权限计划任务启动，避免让主程序继承安装器权限。
     $taskUser = (Get-CimInstance Win32_ComputerSystem).UserName
     if ($taskUser) {

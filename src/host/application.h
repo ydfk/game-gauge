@@ -3,6 +3,7 @@
 #include "metrics/sampler.h"
 #include "hud/overlay.h"
 #include "ipc_server.h"
+#include "updater.h"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -29,6 +30,7 @@ private:
     mutable std::mutex mutex_;
     Config config_;
     Sampler sampler_;
+    Updater updater_;
     std::unique_ptr<Overlay> overlay_;
     std::unique_ptr<IpcServer> ipc_;
     std::atomic<bool> capture_requested_{};
@@ -38,4 +40,3 @@ private:
     uint32_t timed_exit_{};
 };
 }
-

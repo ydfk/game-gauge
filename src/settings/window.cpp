@@ -133,7 +133,7 @@ void SettingsWindow::recreate_target() {
     target_ = hwnd_target_;
 }
 void SettingsWindow::render_to_png(const std::wstring& path, int page) {
-    page_ = std::clamp(page, 0, 3);
+    page_ = std::clamp(page, 0, 4);
     RECT client{}; GetClientRect(window_, &client);
     const auto width = static_cast<UINT>(client.right), height = static_cast<UINT>(client.bottom);
     Microsoft::WRL::ComPtr<IWICImagingFactory> imaging;
@@ -220,9 +220,9 @@ void SettingsWindow::navigation(float width, float height) {
     line(52, 53, 59, 43, background, 2.5f);
     label(L"游戏仪表", 77, 35, 145, 27, heading_.Get(), white);
     label(L"GAMEGAUGE", 78, 61, 145, 18, small_.Get(), muted);
-    const wchar_t* names[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史"};
-    const wchar_t* symbols[]{L"01", L"02", L"03", L"04"};
-    for (int i = 0; i < 4; ++i) {
+    const wchar_t* names[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
+    const wchar_t* symbols[]{L"01", L"02", L"03", L"04", L"05"};
+    for (int i = 0; i < 5; ++i) {
         const float y = 132.f + i * 60;
         if (page_ == i) fill(D2D1::RectF(16, y, 220, y + 48), panel_high, 10);
         label(symbols[i], 32, y + 12, 28, 22, mono_.Get(), page_ == i ? mint : muted);
@@ -247,9 +247,9 @@ void SettingsWindow::paint() {
     target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
     target_->Clear(background);
     navigation(width, height);
-    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史"};
+    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
     const wchar_t* page_subtitles[]{L"调整监控条的样式和位置。", L"同类指标会在监控条中显示在一起。",
-        L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。"};
+        L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。", L"保持最新，保留你的设置和游戏历史。"};
     label(page_titles[page_], 272, 35, width - 420, 43, title_.Get(), white);
     label(page_subtitles[page_], 273, 83, width - 340, 26, body_.Get(), muted);
     line(272, 122, width - 28, 122, edge);
@@ -258,6 +258,7 @@ void SettingsWindow::paint() {
     case 1: metrics_page(width); break;
     case 2: games_page(width); break;
     case 3: history_page(width); break;
+    case 4: updates_page(width); break;
     }
     if (!error_.empty()) label(L"连接提示：" + wide(error_), 274, height - 37, width - 310, 24, small_.Get(), amber);
     if (focused_ >= 0 && focused_ < static_cast<int>(hotspots_.size())) {

@@ -1,9 +1,13 @@
+param([string]$Version, [string]$Repository = '')
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+if (!$Version) { $Version = (Get-Content -LiteralPath "$taskRoot/VERSION" -Raw).Trim() }
+& "$PSScriptRoot/build-core.ps1" -Version $Version -Repository $Repository
 $taskBuild = Join-Path $taskRoot 'build/setup'
 $taskStage = Join-Path $taskBuild ('stage-' + [guid]::NewGuid().ToString('N'))
 $taskApp = Join-Path $taskStage 'app'
 New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp/licenses" -Force | Out-Null
+@{version=$Version;repository=$Repository} | ConvertTo-Json | Set-Content "$taskApp/release.json" -Encoding utf8
 foreach ($taskName in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot "build/core/bin/Release/$taskName") -Destination $taskApp
 }
@@ -29,9 +33,12 @@ $taskPayload = (Join-Path $taskBuild 'payload.zip').Replace('\','/')
 $taskInstall = (Join-Path $taskBuild 'install.ps1').Replace('\','/')
 [IO.File]::WriteAllText($taskInstall, [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'setup-install.ps1')), [Text.UTF8Encoding]::new($true))
 $taskManifest = (Join-Path $taskRoot 'src/setup/setup.manifest').Replace('\','/')
-"#include <windows.h>`n1 RT_MANIFEST `"$taskManifest`"`n101 RCDATA `"$taskPayload`"`n102 RCDATA `"$taskInstall`"" | Set-Content -LiteralPath "$taskBuild/payload.rc" -Encoding utf8
-& "$PSScriptRoot/build-core.ps1"
+"#include <windows.h>`n#include `"version_resource.rc`"`n1 RT_MANIFEST `"$taskManifest`"`n101 RCDATA `"$taskPayload`"`n102 RCDATA `"$taskInstall`"" | Set-Content -LiteralPath "$taskBuild/payload.rc" -Encoding utf8
+& "$PSScriptRoot/build-core.ps1" -Version $Version -Repository $Repository
 if ($LASTEXITCODE) { throw '安装器构建失败' }
 New-Item -ItemType Directory -Path "$taskRoot/build/package" -Force | Out-Null
-Copy-Item -LiteralPath "$taskRoot/build/core/bin/Release/GameGauge.Setup.exe" -Destination "$taskRoot/build/package/GameGauge-0.1.0-Setup.exe" -Force
-Write-Host "已生成：$taskRoot/build/package/GameGauge-0.1.0-Setup.exe"
+$taskOutput = "$taskRoot/build/package/GameGauge-$Version-Setup.exe"
+Copy-Item -LiteralPath "$taskRoot/build/core/bin/Release/GameGauge.Setup.exe" -Destination $taskOutput -Force
+$taskHash = (Get-FileHash -LiteralPath $taskOutput -Algorithm SHA256).Hash.ToLowerInvariant()
+"$taskHash  GameGauge-$Version-Setup.exe" | Set-Content "$taskRoot/build/package/SHA256SUMS.txt" -Encoding ascii
+Write-Host "已生成：$taskOutput"

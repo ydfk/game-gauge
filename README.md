@@ -36,6 +36,8 @@ Windows 11 游戏内性能监控的原生 C++ 桌面程序。当前处于技术�
 
 ## 从源码构建
 
+Tag 自动发布和软件更新使用方法见 [发布与更新](docs/releasing.md)。设置中的“版本与更新”支持手动更新、自动检查，以及可选的游戏退出后自动下载安装。GitHub 构建自动注入仓库地址和 Tag 版本。
+
 在 Windows 11 x64、Visual Studio 2022 C++ 桌面工具和 Windows SDK 环境中运行：
 
 ```powershell

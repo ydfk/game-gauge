@@ -2,6 +2,7 @@
 #include "common/platform.h"
 #include "metrics/target.h"
 #include "common/history.h"
+#include "version.h"
 #include <commctrl.h>
 #include <fstream>
 #include <format>
@@ -49,6 +50,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     if (!icon_) icon_ = make_icon();
     taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     overlay_ = std::make_unique<Overlay>(instance);
+    updater_.configure(config_.check_updates, config_.auto_update);
     add_tray();
     const auto mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     if (!RegisterHotKey(window_, 1, mods, VK_F6) || !RegisterHotKey(window_, 2, mods, VK_F7) || !RegisterHotKey(window_, 3, mods, VK_F8))
@@ -69,6 +71,7 @@ void Application::update_config(Config next) {
     save_config(data_dir() / L"config.json", next);
     { std::lock_guard lock(mutex_); config_ = next; }
     sampler_.configure(std::move(next));
+    const auto saved = config(); updater_.configure(saved.check_updates, saved.auto_update);
 }
 void Application::add_tray() {
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1;
@@ -118,11 +121,14 @@ Json Application::request(const Json& command) {
         for (const auto& item : hud_items(snapshot, config_)) preview.push_back({{"label", utf8(item.label)}, {"value", utf8(item.value)},
             {"group", utf8(item.group)}, {"color", {item.color.r, item.color.g, item.color.b}}});
         return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(sampler_.snapshot())},
-            {"hud_preview", preview},
+            {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
             {"warning", warning_}, {"hud_error", hud_error_}};
     }
     if (action == "apply") { update_config(config_from_json(command.at("config"))); return {{"ok", true}}; }
+    if (action == "check_update") { updater_.check(); return {{"ok", true}}; }
+    if (action == "download_update") { updater_.download(); return {{"ok", true}}; }
+    if (action == "install_update") { updater_.install(); return {{"ok", true}}; }
     if (action == "targets") {
         Json targets = Json::array();
         for (const auto& target : enumerate_targets()) targets.push_back({{"pid", target.pid}, {"name", target.name}, {"path", target.path}, {"foreground", target.foreground}});
@@ -161,6 +167,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
         if (message == WM_TIMER) {
             if (wparam == 3) { self->add_tray(); return 0; }
             if (wparam == 2) { PostQuitMessage(0); return 0; }
+            self->updater_.idle(self->sampler_.snapshot().target.pid != 0);
             if (auto edit_result = self->overlay_->take_edit_result()) {
                 if (*edit_result) {
                     auto config = self->config();

@@ -1,3 +1,4 @@
 #include <windows.h>
+#include "version_resource.rc"
 1 RT_MANIFEST "app.manifest"
 101 ICON "app.ico"

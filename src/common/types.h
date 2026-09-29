@@ -65,6 +65,8 @@ struct Snapshot {
     std::string history_error;
 };
 struct Config {
+    bool check_updates{true};
+    bool auto_update{};
     bool enabled{true};
     bool paused{};
     bool exclude_capture{true};

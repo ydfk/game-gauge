@@ -1,6 +1,7 @@
 #include "window.h"
 #include "common/platform.h"
 #include "hud/renderer.h"
+#include "version.h"
 #include <commdlg.h>
 #include <algorithm>
 #include <format>
@@ -156,5 +157,23 @@ void SettingsWindow::history_page(float width) {
     if (history_.empty()) label(L"开始游戏后自动记录，游戏退出后可在这里查看。", left, 230, span, 30, body_.Get(), muted);
     const auto error = status_.value("snapshot", Json::object()).value("history_error", std::string{});
     if (!error.empty()) label(L"历史保存失败：" + wide(error), left, 745, span, 25, small_.Get(), D2D1::ColorF(0xFFB75E));
+}
+void SettingsWindow::updates_page(float width) {
+    const float left = 272, right = width - 28, span = right - left;
+    const auto update = status_.value("update", Json::object());
+    const auto state = update.value("state", std::string{});
+    list_surface(D2D1::RectF(left, 148, right, 272));
+    label(L"游戏仪表 " + wide(update.value("current", std::string(GAMEGAUGE_VERSION))), left + 14, 162, span - 28, 28, heading_.Get(), white);
+    label(wide(update.value("message", std::string("等待主程序连接"))), left + 14, 203, span - 28, 26, body_.Get(), muted);
+    button(L"检查更新", D2D1::RectF(left, 294, left + 150, 334), [this](float) { command("check_update"); });
+    if (state == "available") button(L"下载更新", D2D1::RectF(left + 164, 294, left + 314, 334), [this](float) { command("download_update"); }, true);
+    if (state == "ready") button(L"安装更新", D2D1::RectF(left + 164, 294, left + 314, 334), [this](float) { command("install_update"); }, true);
+    toggle(L"自动检查更新", L"启动后及每六小时检查一次稳定版", config_.check_updates,
+        D2D1::RectF(left, 366, right, 438), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
+    toggle(L"自动下载并更新", L"游戏退出后启动安装，Windows 可能要求管理员确认", config_.auto_update,
+        D2D1::RectF(left, 452, right, 524), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
+    const auto repository = update.value("repository", std::string{});
+    label(repository.empty() ? L"本地构建尚未配置 GitHub 发布仓库" : L"更新来源：GitHub / " + wide(repository), left, 557, span, 26, small_.Get(), muted);
+    label(L"手动更新也可直接运行新版安装包，配置与历史会保留。", left, 591, span, 26, small_.Get(), muted);
 }
 }

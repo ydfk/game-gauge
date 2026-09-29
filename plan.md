@@ -693,3 +693,7 @@ Use case: logo-brand. Create one original, polished logo concept for FrameEave, 
 - 每次游戏历史本地保存，前台采样时间加权 FPS、最高 FPS/温度、前台时长及结束状态；覆盖原先不长期保存的决定。
 - 原生单 EXE 安装器内置官方依赖，自动安装和启动温度服务，主程序保持普通权限；覆盖原先单独安装依赖的流程。
 - 当前已通过构建、核心/历史生命周期测试及页面渲染；完整安装、真实游戏暂停/退出及跨 DPI 验收仍待实机结果，不能视为全部完成。
+
+## 18. Tag 发布与自动更新
+
+增加 .github/workflows/release.yml；vX.Y.Z Tag 触发 Windows 构建/测试/官方依赖校验/版本化安装器/Release 草稿上传校验及公开发布。版本从 Tag 注入，仓库从 github.repository 注入。原生后台更新器支持默认六小时稳定版检查、手动下载/安装，以及用户开启后自动下载并在游戏退出后安装。保持 UAC 确认、HTTPS 和安装前后摘要核验，不降级，保留配置和历史。发布操作尚未执行；首次实际跨版本更新须在远端就绪并发布两个版本后验收。操作说明见 docs/releasing.md。
