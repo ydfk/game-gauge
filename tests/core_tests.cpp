@@ -13,8 +13,10 @@ namespace {
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
 void close(double actual, double expected, const char* message) { require(std::abs(actual - expected) < 0.001, message); }
 }
+void telemetry_regressions();
 int main() {
     try {
+        telemetry_regressions();
         std::vector<double> values(990, 10); values.insert(values.end(), 10, 50);
         close(gauge::slow_tail_fps(values, .01), 20, "1% Low must average the slowest frame times");
         close(gauge::slow_tail_fps({10, 20, 30}, .01), 1000.0 / 30, "small samples use ceil");
@@ -43,6 +45,9 @@ int main() {
         close(config.font_size, 32, "font size must be bounded");
         require(config.refresh_ms == 100, "sampling interval must be bounded");
         require(config.metrics.size() == 2, "metric IDs must be known and unique");
+        require(!gauge::Config{}.show_obs && !gauge::config_from_json(gauge::Json::object()).show_obs, "OBS monitoring must default off");
+        require(gauge::config_from_json({{"show_obs", true}}).show_obs, "explicit OBS preference must survive upgrades");
+        require(gauge::config_from_json({{"metrics", {"disk_temperature"}}}).metrics[0] == "disk_temperature", "disk temperature must be selectable");
         const auto serialized = gauge::config_json(config);
         require(gauge::config_json(gauge::config_from_json(serialized)) == serialized, "config round trip must preserve values");
         bool rejected{};
@@ -55,6 +60,8 @@ int main() {
         gauge::Snapshot game; game.target.pid = 123; game.target.started = 456;
         game.target.name = "test.exe"; game.target.foreground = true; game.game_confirmed = true;
         game.fps = gauge::available(60, "test");
+        game.cpu_load = gauge::available(25, "test");
+        game.disk_temperature = gauge::available(43, "test");
         { gauge::SessionHistory history(directory);
           game.timestamp_ms = 1000; history.update(game, 10000, [](const auto&) { return true; });
           game.timestamp_ms = 2000; history.update(game, 11000, [](const auto&) { return true; });
@@ -68,6 +75,29 @@ int main() {
         require(rows.size() == 1 && rows[0]["status"] == "completed", "game exit must complete one local session");
         close(rows[0]["active_seconds"].get<double>(), 1, "background time must not inflate active time");
         close(rows[0]["average_fps"].get<double>(), 60, "session FPS aggregation");
+        close(rows[0]["stats"]["cpu_load"]["average"].get<double>(), 25, "hardware averages must use active time");
+        close(rows[0]["stats"]["disk_temperature"]["maximum"].get<double>(), 43, "disk temperature must persist in history");
+        require(rows[0].contains("hardware") && rows[0]["series"].size() >= 3, "history must persist hardware and performance curves");
+        require(rows[0]["series"][2][1].is_null(), "background intervals must leave gaps in curves");
+        require(!gauge::read_history(directory, false)[0].contains("series"), "history list must omit large curve payloads");
+        require(gauge::read_history_entry(directory, rows[0]["id"].get<std::string>())["series"] == rows[0]["series"], "history detail must preserve curves");
+        {
+            gauge::SessionHistory history(directory); auto long_game = game; long_game.target.pid = 888;
+            for (uint64_t i = 0; i < 2500; ++i) {
+                long_game.timestamp_ms = 1000 + i * 1000;
+                long_game.fps = gauge::available(i % 2 ? 80 : 40, "test");
+                long_game.cpu_temperature = i == 10 ? gauge::available(90, "test") : gauge::missing(gauge::State::unsupported, "missing");
+                history.update(long_game, 1000000 + i * 1000, [](const auto&) { return true; });
+            }
+            history.finish_all(3500000);
+            const auto record = gauge::read_history_entry(directory, "1000000-888");
+            require(record["series"].size() <= 1024, "long session curves must be bounded");
+            close(record["stats"]["fps"]["minimum"].get<double>(), 40, "decimation must not discard summary minimum");
+            close(record["stats"]["fps"]["maximum"].get<double>(), 80, "decimation must not discard summary maximum");
+            close(record["stats"]["cpu_temperature"]["average"].get<double>(), 90, "missing sensors must not dilute averages");
+            require(record.dump().size() < 262000, "history detail must fit IPC response limit");
+            gauge::delete_history(directory, "1000000-888");
+        }
         { gauge::SessionHistory history(directory); game.timestamp_ms = 30000;
           history.update(game, 40000, [](const auto&) { return true; }); }
         { gauge::SessionHistory recovery(directory); }

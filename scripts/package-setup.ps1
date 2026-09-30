@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp
 foreach ($taskName in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot "build/core/bin/Release/$taskName") -Destination $taskApp
 }
-foreach ($taskName in @('install-presentmon.ps1','setup-uninstall.ps1','setup-processes.ps1')) {
+foreach ($taskName in @('install-presentmon.ps1','setup-uninstall.ps1','setup-processes.ps1','setup-shortcuts.ps1')) {
     [IO.File]::WriteAllText((Join-Path "$taskApp/scripts" $taskName), [IO.File]::ReadAllText((Join-Path $PSScriptRoot $taskName)), [Text.UTF8Encoding]::new($true))
 }
 Copy-Item -LiteralPath "$taskRoot/.deps/AMDFamily17-0.2.11.bin" -Destination "$taskApp/.deps"
@@ -33,7 +33,8 @@ $taskPayload = (Join-Path $taskBuild 'payload.zip').Replace('\','/')
 $taskInstall = (Join-Path $taskBuild 'install.ps1').Replace('\','/')
 [IO.File]::WriteAllText($taskInstall, [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'setup-install.ps1')), [Text.UTF8Encoding]::new($true))
 $taskManifest = (Join-Path $taskRoot 'src/setup/setup.manifest').Replace('\','/')
-"#include <windows.h>`n#include `"version_resource.rc`"`n1 RT_MANIFEST `"$taskManifest`"`n101 RCDATA `"$taskPayload`"`n102 RCDATA `"$taskInstall`"" | Set-Content -LiteralPath "$taskBuild/payload.rc" -Encoding utf8
+$taskIcon = (Join-Path $taskRoot 'src/host/app.ico').Replace('\','/')
+"#include <windows.h>`n#include `"version_resource.rc`"`n1 RT_MANIFEST `"$taskManifest`"`n101 ICON `"$taskIcon`"`n101 RCDATA `"$taskPayload`"`n102 RCDATA `"$taskInstall`"" | Set-Content -LiteralPath "$taskBuild/payload.rc" -Encoding utf8
 & "$PSScriptRoot/build-core.ps1" -Version $Version -Repository $Repository
 if ($LASTEXITCODE) { throw '安装器构建失败' }
 New-Item -ItemType Directory -Path "$taskRoot/build/package" -Force | Out-Null

@@ -1,6 +1,7 @@
 #include "sampler.h"
 #include "hardware.h"
 #include "cpu_temperature.h"
+#include "disk.h"
 #include "nvidia.h"
 #include "presentmon.h"
 #include "target.h"
@@ -137,7 +138,7 @@ void Sampler::run(std::stop_token stop) {
     std::unique_ptr<SessionHistory> history;
     try { history = std::make_unique<SessionHistory>(data_dir() / L"history"); }
     catch (const std::exception& error) { current.history_error = error.what(); }
-    uint64_t last_hardware{}, last_session = GetTickCount64();
+    uint64_t last_hardware{}, last_disks{}, last_session = GetTickCount64();
     bool was_paused{}, was_foreground{};
     while (!stop.stop_requested()) {
         Config config; bool reset{}, rediscover{};
@@ -149,16 +150,26 @@ void Sampler::run(std::stop_token stop) {
         const auto previous = current.target;
         current.target = find_target(config, previous);
         const bool target_changed = previous.pid != current.target.pid || previous.started != current.target.started;
+        if (target_changed) {
+            const auto elapsed = history ? history->active_seconds(current.target) : std::nullopt;
+            current.session_seconds = elapsed.value_or(0);
+            current.game_confirmed = elapsed.has_value();
+            current.selected_gpu.clear();
+        }
         if (reset || target_changed) {
-            statistics.reset(); presentmon.reset(); current.session_seconds = 0;
-            current.game_confirmed = false;
-            if (target_changed) current.selected_gpu.clear();
+            // 帧流重建与本局游玩时长分开；显示模式变化不重新确认仍在运行的游戏。
+            statistics.reset(); presentmon.reset();
             current.fps = current.frametime = current.low1 = current.low01 = missing(State::waiting, "等待游戏帧");
         } else if (was_paused && !config.paused) {
             statistics.reset(); presentmon.reset();
+        } else if (!was_foreground && current.target.foreground) {
+            statistics.reset();
         }
         current.timestamp_ms = GetTickCount64(); current.paused = config.paused;
         current.cpu_temperature = sample_cpu_temperature(current.hardware);
+        if (!config.paused && (!last_disks || current.timestamp_ms - last_disks >= 5000)) {
+            sample_disks(current); last_disks = current.timestamp_ms;
+        }
         if (!config.paused) {
             if (current.timestamp_ms - last_hardware >= 1000) {
                 counters.sample(current, config); nvidia.sample(current.hardware); last_hardware = current.timestamp_ms;
@@ -174,7 +185,7 @@ void Sampler::run(std::stop_token stop) {
                 presentmon.status().starts_with("PresentMon 已连接"))
                 current.fps = available(0, "PresentMon · 当前没有新呈现帧");
             if (collecting && was_foreground && !was_paused && !target_changed)
-                current.session_seconds += (current.timestamp_ms - last_session) / 1000.0;
+                current.session_seconds += std::min(2.0, (current.timestamp_ms - last_session) / 1000.0);
             current.frame_status = presentmon.status();
             if (active && !collecting) current.frame_status += " · 游戏已失焦，统计暂停";
         } else {
@@ -183,6 +194,8 @@ void Sampler::run(std::stop_token stop) {
         if (history) try {
             history->update(current, wall_time_ms(), target_alive); current.history_error.clear();
         } catch (const std::exception& error) { current.history_error = error.what(); }
+        // HUD 与历史使用同一个累计值，切回之前的游戏也能恢复原有时长。
+        if (history) if (const auto elapsed = history->active_seconds(current.target)) current.session_seconds = *elapsed;
         last_session = current.timestamp_ms; was_paused = config.paused; was_foreground = current.target.foreground;
         {
             std::lock_guard lock(mutex_); snapshot_ = current;

@@ -113,6 +113,8 @@ if __name__ == "__main__":
         thread = threading.Thread(target=serve, args=(listener,), daemon=True)
         thread.start()
         env = dict(os.environ, APPDATA=str(DATA))
+        (DATA / "gauge").mkdir(exist_ok=True)
+        (DATA / "gauge/config.json").write_text(json.dumps({"version": 1, "show_obs": True}))
         host = subprocess.Popen([str(BIN / "GameGauge.exe"), "--background", "--data-dir", str(DATA / "gauge")], env=env)
         try:
             for state, label in (("idle", "未录制"), ("recording", "● 录制中"), ("paused", "Ⅱ 已暂停")):

@@ -1,4 +1,5 @@
 #include "frame_statistics.h"
+#include "sample_validation.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -14,7 +15,7 @@ double slow_tail_fps(const std::vector<double>& frames, double fraction) {
     return sum > 0 ? 1000.0 * count / sum : 0;
 }
 void FrameStatistics::add(uint64_t timestamp, uint64_t chain, double ms) {
-    if (!std::isfinite(ms) || ms <= 0 || timestamp == 0) return;
+    if (!valid_frame_interval(ms) || timestamp == 0) return;
     frames_.push_back({timestamp, chain, ms});
     // 时间窗口之外还设容量上限，避免高帧率游戏无限占用内存。
     while (!frames_.empty() && (frames_.size() > 120000 ||

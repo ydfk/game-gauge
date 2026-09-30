@@ -2,6 +2,7 @@
 #include "common/platform.h"
 #include "metrics/target.h"
 #include "common/history.h"
+#include "common/sample_validation.h"
 #include "version.h"
 #include <commctrl.h>
 #include <fstream>
@@ -51,6 +52,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     overlay_ = std::make_unique<Overlay>(instance);
     updater_.configure(config_.check_updates, config_.auto_update);
+    obs_.configure(config_.show_obs);
     add_tray();
     const auto mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     if (!RegisterHotKey(window_, 1, mods, VK_F6) || !RegisterHotKey(window_, 2, mods, VK_F7) || !RegisterHotKey(window_, 3, mods, VK_F8))
@@ -74,6 +76,7 @@ void Application::update_config(Config next) {
     { std::lock_guard lock(mutex_); config_ = next; }
     sampler_.configure(std::move(next));
     const auto saved = config(); updater_.configure(saved.check_updates, saved.auto_update);
+    obs_.configure(saved.show_obs);
 }
 void Application::add_tray() {
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1;
@@ -147,13 +150,26 @@ Json Application::request(const Json& command) {
         delete_history(data_dir() / L"history", command.at("id").get<std::string>());
         return {{"ok", true}};
     }
+    if (action == "history_detail") {
+        auto record = read_history_entry(data_dir() / L"history", command.at("id").get<std::string>());
+        filter_history_view(record);
+        return {{"ok", true}, {"record", std::move(record)}};
+    }
     if (action == "history") {
-        const auto rows = read_history(data_dir() / L"history");
+        auto all = read_history(data_dir() / L"history", false);
+        for (auto& record : all) filter_history_view(record);
+        Json rows = Json::array(), dates = Json::array(); double active_seconds{};
+        const auto day = command.value("day", std::string{});
+        for (const auto& row : all) {
+            const auto date = history_day(row.value("started_ms", 0ull));
+            if (std::find(dates.begin(), dates.end(), Json(date)) == dates.end()) dates.push_back(date);
+            if (day.empty() || date == day) { rows.push_back(row); active_seconds += row.value("active_seconds", 0.0); }
+        }
         const auto offset = std::min(command.value("offset", size_t{}), rows.size());
         const auto count = std::clamp(command.value("limit", size_t{4}), size_t{1}, size_t{32});
         Json page = Json::array();
         for (size_t i = offset; i < std::min(rows.size(), offset + count); ++i) page.push_back(rows[i]);
-        return {{"ok", true}, {"total", rows.size()}, {"history", page}};
+        return {{"ok", true}, {"total", rows.size()}, {"active_seconds", active_seconds}, {"dates", dates}, {"history", page}};
     }
     if (action == "reset") sampler_.reset_statistics();
     else if (action == "rediscover") sampler_.refresh_hardware();

@@ -9,7 +9,7 @@
 namespace gauge {
 namespace {
 const std::set<std::string> metric_ids{"fps", "frametime", "low1", "low01", "cpu_load", "cpu_clock", "cpu_temperature",
-    "gpu_load", "gpu_temperature", "gpu_power", "gpu_clock", "gpu_fan", "vram", "memory_load", "memory_used", "process_cpu", "process_memory", "session"};
+    "gpu_load", "gpu_temperature", "gpu_power", "gpu_clock", "gpu_fan", "vram", "memory_load", "memory_used", "process_cpu", "process_memory", "disk_temperature", "session"};
 Json metric_json(const Metric& metric) {
     const char* states[]{"valid", "unsupported", "permission", "waiting", "stale", "error"};
     return {{"value", metric.value ? Json(*metric.value) : Json(nullptr)}, {"state", states[static_cast<int>(metric.state)]},
@@ -19,7 +19,7 @@ Json metric_json(const Metric& metric) {
 Config config_from_json(const Json& json) {
     if (!json.is_object() || json.value("version", 1) != 1) throw std::runtime_error("不支持的配置版本");
     Config config;
-    config.show_obs = json.value("show_obs", true);
+    config.show_obs = json.value("show_obs", false);
     config.check_updates = json.value("check_updates", true);
     config.auto_update = json.value("auto_update", false);
     config.enabled = json.value("enabled", true);
@@ -54,7 +54,8 @@ Config config_from_json(const Json& json) {
         if (id.starts_with("cpu_") || id == "process_cpu") return 1;
         if (id.starts_with("gpu_") || id == "vram") return 2;
         if (id.starts_with("memory_") || id == "process_memory") return 3;
-        if (id == "session") return 4;
+        if (id == "disk_temperature") return 4;
+        if (id == "session") return 5;
         return 0;
     };
     std::stable_sort(config.metrics.begin(), config.metrics.end(), [&](const auto& a, const auto& b) { return group(a) < group(b); });
@@ -97,7 +98,8 @@ void save_config(const std::filesystem::path& path, const Config& config) {
         throw std::runtime_error(error_text(GetLastError()));
 }
 Json snapshot_json(const Snapshot& s) {
-    Json devices = Json::array(), displays = Json::array();
+    Json devices = Json::array(), displays = Json::array(), disks = Json::array();
+    for (const auto& disk : s.hardware.disks) disks.push_back({{"id", disk.id}, {"name", disk.name}, {"temperature", metric_json(disk.temperature)}});
     for (const auto& gpu : s.hardware.gpus) devices.push_back({{"id", gpu.id}, {"name", gpu.name}, {"vendor", gpu.vendor},
         {"pci", gpu.pci}, {"memory_total_bytes", gpu.dedicated_bytes}, {"load", metric_json(gpu.load)},
         {"temperature", metric_json(gpu.temperature)}, {"power", metric_json(gpu.power)}, {"clock", metric_json(gpu.clock)},
@@ -107,7 +109,7 @@ Json snapshot_json(const Snapshot& s) {
     return {{"obs_state", s.obs_state}, {"timestamp_ms", s.timestamp_ms}, {"target", {{"pid", s.target.pid}, {"name", s.target.name},
         {"path", s.target.path}, {"foreground", s.target.foreground}}}, {"cpu", s.hardware.cpu},
         {"cpu_vendor", s.hardware.cpu_vendor}, {"logical_processors", s.hardware.logical_processors},
-        {"gpus", devices}, {"displays", displays}, {"cpu_load", metric_json(s.cpu_load)}, {"cpu_clock", metric_json(s.cpu_clock)},
+        {"gpus", devices}, {"displays", displays}, {"disks", disks}, {"disk_temperature", metric_json(s.disk_temperature)}, {"cpu_load", metric_json(s.cpu_load)}, {"cpu_clock", metric_json(s.cpu_clock)},
         {"cpu_temperature", metric_json(s.cpu_temperature)}, {"memory_load", metric_json(s.memory_load)},
         {"memory_used", metric_json(s.memory_used)}, {"memory_total", metric_json(s.memory_total)},
         {"process_cpu", metric_json(s.process_cpu)}, {"process_memory", metric_json(s.process_memory)},

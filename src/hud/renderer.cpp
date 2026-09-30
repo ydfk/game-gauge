@@ -32,6 +32,7 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         else if (id == "low1") { item.label = L"1% Low"; item.value = number(s.low1); item.color = green; }
         else if (id == "low01") { item.label = L"0.1% Low"; item.value = number(s.low01); item.color = green; }
         else if (id == "cpu_temperature") { item.label = L"CPU"; item.value = number(s.cpu_temperature, L"°C"); item.color = amber; }
+        else if (id == "disk_temperature") { item.label = L"硬盘"; item.value = number(s.disk_temperature, L"°C"); item.color = amber; }
         else if (id == "cpu_load") { item.label = L"CPU"; item.value = number(s.cpu_load, L"%"); item.color = green; }
         else if (id == "cpu_clock") { item.label = L"CPU"; item.value = number(s.cpu_clock, L" MHz"); item.color = blue; }
         else if (id == "gpu_temperature") { item.label = L"GPU"; item.value = number(temperature, L"°C"); item.color = amber; }
@@ -53,7 +54,7 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         else continue;
         item.group = id.starts_with("cpu_") || id == "process_cpu" ? L"CPU" :
             id.starts_with("gpu_") || id == "vram" ? L"GPU" :
-            id.starts_with("memory_") || id == "process_memory" ? L"内存" : id == "session" ? L"时间" : L"帧率";
+            id.starts_with("memory_") || id == "process_memory" ? L"内存" : id == "disk_temperature" ? L"硬盘" : id == "session" ? L"时间" : L"帧率";
         const auto group = item.label;
         if (previous_group == group && (group == L"CPU" || group == L"GPU")) item.label.clear();
         previous_group = group;

@@ -1,5 +1,6 @@
 #include "presentmon.h"
 #include "common/platform.h"
+#include "common/sample_validation.h"
 #include "PresentMonAPI.h"
 #include <cstring>
 #include <format>
@@ -37,6 +38,8 @@ struct PresentMonProvider::Impl {
     PM_FRAME_QUERY_HANDLE frames{};
     uint32_t frame_bytes{}, pid{};
     uint64_t started{}, retry_at{}, raw_frames{}, accepted_frames{};
+    uint64_t active_since{};
+    bool collecting{};
     std::string message{"PresentMon 服务尚未连接"};
     PM_QUERY_ELEMENT frame_elements[3]{{PM_METRIC_SWAP_CHAIN_ADDRESS, PM_STAT_NONE},
         {PM_METRIC_PRESENT_START_QPC, PM_STAT_NONE}, {PM_METRIC_BETWEEN_PRESENTS, PM_STAT_NONE}};
@@ -67,6 +70,7 @@ struct PresentMonProvider::Impl {
         capability_list.clear();
         if (session && close) close(session);
         session = nullptr; pid = 0; started = 0; raw_frames = accepted_frames = 0;
+        active_since = 0; collecting = false;
     }
     bool connect() {
         if (session) return true;
@@ -182,6 +186,7 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
             impl_->message = "帧采集目标不可用，状态 " + std::to_string(result); impl_->disconnect(); return;
         }
         impl_->pid = target.pid; impl_->started = target.started;
+        impl_->collecting = false; impl_->active_since = 0;
         result = impl_->register_frames(impl_->session, &impl_->frames, impl_->frame_elements, 3, &impl_->frame_bytes);
         if (result != PM_STATUS_SUCCESS) { impl_->message = "帧查询不支持，状态 " + std::to_string(result); impl_->disconnect(); return; }
     }
@@ -195,6 +200,9 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
         impl_->message = "PresentMon 帧查询布局异常"; impl_->disconnect(); return;
     }
     std::vector<uint8_t> frames(static_cast<size_t>(impl_->frame_bytes) * 1024);
+    LARGE_INTEGER active_qpc{}; QueryPerformanceCounter(&active_qpc);
+    if (collect_frames && !impl_->collecting) impl_->active_since = static_cast<uint64_t>(active_qpc.QuadPart);
+    impl_->collecting = collect_frames;
     uint32_t count = 1024;
     const auto result = impl_->consume(impl_->frames, target.pid, frames.data(), &count);
     if (result != PM_STATUS_SUCCESS) { impl_->message = "帧流已断开，状态 " + std::to_string(result); impl_->disconnect(); statistics.reset(); return; }
@@ -208,7 +216,7 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
         memcpy(&timestamp, frame + impl_->frame_elements[1].dataOffset, sizeof(timestamp));
         memcpy(&ms, frame + impl_->frame_elements[2].dataOffset, sizeof(ms));
         const auto age = timestamp <= static_cast<uint64_t>(qpc.QuadPart) ? (static_cast<uint64_t>(qpc.QuadPart) - timestamp) * 1000 / frequency.QuadPart : 0;
-        if (collect_frames && std::isfinite(ms) && ms > 0 && timestamp <= static_cast<uint64_t>(qpc.QuadPart) &&
+        if (collect_frames && frame_inside_active_period(timestamp, impl_->active_since, ms, static_cast<uint64_t>(frequency.QuadPart)) && timestamp <= static_cast<uint64_t>(qpc.QuadPart) &&
             age < now && age < 60000) { statistics.add(now - age, chain, ms); ++impl_->accepted_frames; }
     }
     impl_->raw_frames += count;

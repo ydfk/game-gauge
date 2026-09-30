@@ -30,13 +30,7 @@ void remember(Config& config, const std::string& path, bool excluded) {
     }
     config.auto_target = true;
 }
-std::wstring value_text(const Json& row, const char* key, const wchar_t* unit = L"") {
-    return row.contains(key) && row[key].is_number() ? std::format(L"{:.0f}{}", row[key].get<double>(), unit) : L"—";
-}
-std::wstring local_time(uint64_t milliseconds) {
-    const time_t seconds = static_cast<time_t>(milliseconds / 1000); tm value{}; localtime_s(&value, &seconds);
-    wchar_t text[64]{}; wcsftime(text, 64, L"%Y-%m-%d %H:%M", &value); return text;
-}
+
 }
 void SettingsWindow::list_surface(D2D1_RECT_F rect, bool checked) {
     fill(rect, checked ? selected : panel);
@@ -90,33 +84,50 @@ void SettingsWindow::appearance_page(float width) {
     for (int i = 0; i < 4; ++i) button(anchors[i], D2D1::RectF(left + i * (box + 12), 587, left + i * (box + 12) + box, 629),
         [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
     label(L"切换位置会立即更新预览；回到游戏后自动应用。", left, 649, span, 24, small_.Get(), muted);
-    toggle(L"OBS 录制状态", L"显示录制、暂停和连接状态", config_.show_obs,
-        D2D1::RectF(left, 685, right, 747), [this](float) { config_.show_obs = !config_.show_obs; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;
+    if (disk_details_) {
+        const auto disks = status_.value("snapshot", Json::object()).value("disks", Json::array());
+        label(L"硬盘温度", left, 148, span - 120, 30, heading_.Get(), mint);
+        row_action(L"‹ 返回项目", D2D1::RectF(width - 150, 148, width - 28, 182), [this](float) { disk_details_ = false; });
+        const auto pages = std::max(size_t{1}, (disks.size() + 5) / 6); disk_page_ = std::min(disk_page_, pages - 1);
+        float y = 205;
+        for (size_t i = disk_page_ * 6; i < std::min(disks.size(), disk_page_ * 6 + 6); ++i) {
+            const auto& disk = disks[i]; const auto sensor = disk.value("temperature", Json::object());
+            const bool valid = sensor.value("state", std::string{}) == "valid" && sensor.value("value", Json{}).is_number();
+            list_surface(D2D1::RectF(left, y, left + span, y + 70));
+            label(wide(disk.value("name", std::string{})), left + 14, y + 5, span - 130, 27, body_.Get(), white);
+            label(valid ? std::format(L"{:.0f}°C", sensor["value"].get<double>()) : L"不可用", left + span - 108, y + 5, 94, 27, heading_.Get(), valid ? mint : muted);
+            label(wide(sensor.value(valid ? "source" : "reason", std::string{})), left + 14, y + 37, span - 28, 25, small_.Get(), muted); y += 78;
+        }
+        if (disks.empty()) label(L"未发现可读取的硬盘，等待设备采样。", left, 245, span, 28, body_.Get(), muted);
+        page_buttons(width - 28, 694, disk_page_, pages); return;
+    }
     const std::vector<std::pair<std::wstring, std::vector<std::string>>> groups{
         {L"帧率", {"fps", "frametime", "low1", "low01"}},
         {L"CPU", {"cpu_temperature", "cpu_load", "cpu_clock", "process_cpu"}},
         {L"GPU", {"gpu_temperature", "gpu_load", "gpu_clock", "gpu_power", "gpu_fan", "vram"}},
-        {L"内存与游戏", {"memory_load", "memory_used", "process_memory", "session"}}};
+        {L"内存、硬盘与游戏", {"memory_load", "memory_used", "process_memory", "session", "disk_temperature", "obs"}}};
     float y = 148;
     for (const auto& [name, ids] : groups) {
         label(name, left, y, span, 27, heading_.Get(), mint); y += 38;
         for (size_t i = 0; i < ids.size(); ++i) {
             const auto id = ids[i]; const float x = left + static_cast<float>(i % 4) * (box + 10), row = y + static_cast<float>(i / 4) * 57;
-            const auto rect = D2D1::RectF(x, row, x + box, row + 48); const bool checked = contains(config_.metrics, id);
+            const auto rect = D2D1::RectF(x, row, x + box, row + 48); const bool checked = id == "obs" ? config_.show_obs : contains(config_.metrics, id);
             fill(rect, checked ? selected : panel, 8);
-            label((checked ? L"✓ " : L"   ") + metric_name(id), x + 14, row + 3, box - 28, 22, body_.Get(), white);
-            label(metric_value(id), x + 28, row + 24, box - 38, 19, small_.Get(), checked ? mint : muted);
+            label((checked ? L"✓ " : L"   ") + (id == "obs" ? L"OBS 录制状态" : metric_name(id)), x + 14, row + 3, box - 28, 22, body_.Get(), white);
+            label(id == "obs" ? (checked ? L"已开启" : L"默认关闭") : metric_value(id), x + 28, row + 24, box - 38, 19, small_.Get(), checked ? mint : muted);
             add(rect, [this, id](float) {
+                if (id == "obs") { config_.show_obs = !config_.show_obs; apply(); return; }
                 auto& metrics = config_.metrics; const auto it = std::find(metrics.begin(), metrics.end(), id);
                 if (it == metrics.end()) metrics.push_back(id); else if (metrics.size() > 1) metrics.erase(it);
                 apply();
             });
         }
-        y += static_cast<float>((ids.size() + 3) / 4) * 57 + 26;
+        y += static_cast<float>((ids.size() + 3) / 4) * 57 + 18;
     }
+    row_action(L"查看各硬盘温度 ›", D2D1::RectF(left, y, left + span, y + 30), [this](float) { disk_details_ = true; }, true);
 }
 void SettingsWindow::choose_process(bool excluded) {
     wchar_t path[32768]{}; OPENFILENAMEW dialog{sizeof(dialog)};
@@ -173,47 +184,6 @@ void SettingsWindow::games_page(float width) {
         label(L"系统和常见工具已自动过滤，这里只显示你添加的程序。", left + 16, 611, span - 32, 22, small_.Get(), muted);
     }
     page_buttons(right, 711, blacklist_page_, blocked_pages);
-}
-void SettingsWindow::history_page(float width) {
-    const float left = 272, right = width - 28, span = right - left;
-    const auto edge = D2D1::ColorF(0x233140);
-    const auto pages = std::max(size_t{1}, (history_count_ + 3) / 4); history_page_index_ = std::min(history_page_index_, pages - 1);
-    label(std::format(L"共 {} 次游戏", history_count_), left, 148, span, 28, heading_.Get(), white);
-    const float duration_x = left + span * .35f, fps_x = left + span * .47f, temp_x = left + span * .60f, state_x = right - 172;
-    fill(D2D1::RectF(left, 201, right, 590), D2D1::ColorF(0x101A27), 10);
-    label(L"游戏 / 开始时间", left + 16, 212, span * .32f, 26, small_.Get(), muted);
-    label(L"游玩时长", duration_x, 212, 90, 26, small_.Get(), muted);
-    label(L"平均 FPS", fps_x, 212, 90, 26, small_.Get(), muted);
-    label(L"最高温度", temp_x, 212, 110, 26, small_.Get(), muted);
-    label(L"状态", state_x, 212, 85, 26, small_.Get(), muted);
-    line(left + 16, 248, right - 16, 248, edge);
-    float y = 252;
-    for (const auto& row : history_) {
-        label(wide(row.value("game", std::string{})), left + 16, y + 12, span * .33f - 20, 26, body_.Get(), white);
-        label(local_time(row.value("started_ms", 0ull)), left + 16, y + 43, span * .33f - 20, 23, small_.Get(), muted);
-        const auto seconds = static_cast<unsigned>(row.value("active_seconds", 0.0));
-        const auto duration = seconds >= 3600 ? std::format(L"{} 小时 {} 分", seconds / 3600, seconds / 60 % 60) :
-            seconds >= 60 ? std::format(L"{} 分 {} 秒", seconds / 60, seconds % 60) : std::format(L"{} 秒", seconds);
-        label(duration, duration_x, y + 13, span * .12f - 8, 27, small_.Get(), white);
-        label(value_text(row, "average_fps"), fps_x, y + 12, 90, 28, mono_.Get(), white);
-        label(L"峰值 " + value_text(row, "maximum_fps"), fps_x, y + 43, 95, 23, small_.Get(), muted);
-        label(L"CPU " + value_text(row, "cpu_max_celsius", L"°C"), temp_x, y + 13, 110, 26, small_.Get(), white);
-        label(L"GPU " + value_text(row, "gpu_max_celsius", L"°C"), temp_x, y + 43, 110, 23, small_.Get(), muted);
-        const bool active = row.value("status", std::string{}) == "running";
-        label(active ? L"进行中" : L"已结束", state_x, y + 13, 85, 27, small_.Get(), active ? mint : muted);
-        row_action(L"删除", D2D1::RectF(right - 62, y + 14, right - 12, y + 58), [this, id = row.at("id").get<std::string>()](float) {
-            try { ipc_request({{"command", "delete_history"}, {"id", id}}); history_page_index_ = 0; refresh(); }
-            catch (const std::exception& e) { error_ = e.what(); }
-        });
-        y += 82; if (y < 575) line(left + 16, y, right - 16, y, edge);
-    }
-    if (history_.empty()) {
-        label(L"还没有游戏记录", left + 24, 334, span - 48, 32, heading_.Get(), white);
-        label(L"开始游戏后会自动记录，结束后可在这里查看。", left + 24, 376, span - 48, 28, body_.Get(), muted);
-    }
-    page_buttons(right, 608, history_page_index_, pages, true);
-    const auto error = status_.value("snapshot", Json::object()).value("history_error", std::string{});
-    if (!error.empty()) label(L"历史保存失败：" + wide(error), left, 665, span, 25, small_.Get(), D2D1::ColorF(0xFFB75E));
 }
 void SettingsWindow::updates_page(float width) {
     const float left = 272, right = width - 28, span = right - left;

@@ -8,7 +8,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
         if (auto existing = FindWindowW(L"GameGauge.Settings", nullptr)) {
-            ShowWindow(existing, SW_RESTORE); SetForegroundWindow(existing);
+            // 避免新进程的启动显示参数把已有的最大化窗口还原。
+            ShowWindowAsync(existing, IsIconic(existing) ? SW_RESTORE : (IsZoomed(existing) ? SW_SHOWMAXIMIZED : SW_SHOW));
+            SetForegroundWindow(existing);
             CoUninitialize(); return 0;
         }
         int count{}; auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);

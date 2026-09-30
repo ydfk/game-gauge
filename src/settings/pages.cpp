@@ -20,7 +20,7 @@ const std::vector<std::pair<std::string, std::wstring>> all_metrics{
     {"gpu_temperature", L"GPU 温度"}, {"gpu_load", L"GPU 占用"}, {"gpu_clock", L"GPU 频率"},
     {"gpu_power", L"GPU 功耗"}, {"gpu_fan", L"GPU 风扇"}, {"vram", L"显存用量"},
     {"memory_load", L"内存占用"}, {"memory_used", L"内存用量"}, {"process_cpu", L"游戏 CPU"},
-    {"process_memory", L"游戏内存"}, {"session", L"运行时长"}
+    {"process_memory", L"游戏内存"}, {"disk_temperature", L"硬盘温度"}, {"session", L"运行时长"}
 };
 std::wstring reading(const Json& metric, const wchar_t* unit = L"", int precision = 0) {
     if (!metric.is_object() || metric.value("state", std::string{}) != "valid" || !metric.contains("value") || metric["value"].is_null()) return L"—";
@@ -59,7 +59,7 @@ std::wstring SettingsWindow::metric_value(const std::string& id) const {
         return L"—";
     }
     const wchar_t* unit = L"";
-    if (id == "cpu_temperature") unit = L"°C";
+    if (id == "cpu_temperature" || id == "disk_temperature") unit = L"°C";
     else if (id == "cpu_load" || id == "memory_load" || id == "process_cpu") unit = L"%";
     else if (id == "cpu_clock") unit = L" MHz";
     else if (id == "frametime") unit = L" ms";

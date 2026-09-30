@@ -57,9 +57,11 @@ void pause(std::stop_token stop, unsigned milliseconds) {
 ObsMonitor::ObsMonitor() : worker_([this](std::stop_token stop) { run(stop); }) {}
 ObsMonitor::~ObsMonitor() { worker_.request_stop(); worker_.join(); }
 std::string ObsMonitor::state() const { std::lock_guard lock(mutex_); return state_; }
+void ObsMonitor::configure(bool enabled) { enabled_ = enabled; if (!enabled) publish("off"); }
 void ObsMonitor::publish(std::string state) { std::lock_guard lock(mutex_); state_ = std::move(state); }
 void ObsMonitor::run(std::stop_token stop) {
     while (!stop.stop_requested()) {
+        if (!enabled_) { publish("off"); pause(stop, 100); continue; }
         try {
             wchar_t roaming[32768]{};
             require(GetEnvironmentVariableW(L"APPDATA", roaming, 32768) > 0);
@@ -88,7 +90,7 @@ void ObsMonitor::run(std::stop_token stop) {
             }
             socket.send({{"op", 1}, {"d", identify}});
             require(socket.receive().at("op") == 2);
-            while (!stop.stop_requested()) {
+            while (!stop.stop_requested() && enabled_) {
                 socket.send({{"op", 6}, {"d", {{"requestType", "GetRecordStatus"}, {"requestId", "gamegauge-record"}}}});
                 const auto reply = socket.receive();
                 require(reply.at("op") == 7 && reply.at("d").at("requestId") == "gamegauge-record" && reply.at("d").at("requestStatus").at("result") == true);
@@ -96,7 +98,7 @@ void ObsMonitor::run(std::stop_token stop) {
                 publish(!data.at("outputActive").get<bool>() ? "idle" : data.at("outputPaused").get<bool>() ? "paused" : "recording");
                 pause(stop, 750);
             }
-        } catch (...) { publish("disconnected"); }
+        } catch (...) { publish(enabled_ ? "disconnected" : "off"); }
         pause(stop, 2000);
     }
 }

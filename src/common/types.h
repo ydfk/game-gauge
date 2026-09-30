@@ -33,12 +33,17 @@ struct Display {
     uint32_t dpi{96};
     bool hdr{};
 };
+struct Disk {
+    std::string id, name;
+    Metric temperature;
+};
 struct Hardware {
     std::string cpu;
     std::string cpu_vendor;
     uint32_t logical_processors{};
     std::vector<Gpu> gpus;
     std::vector<Display> displays;
+    std::vector<Disk> disks;
 };
 struct Target {
     uint32_t pid{};
@@ -55,6 +60,7 @@ struct Snapshot {
     Hardware hardware;
     Metric cpu_load, cpu_clock, cpu_temperature, memory_load, memory_used, memory_total;
     Metric process_cpu, process_memory, fps, frametime, low1, low01;
+    Metric disk_temperature;
     uint64_t frame_samples{};
     double session_seconds{};
     std::vector<double> recent_frames;
@@ -66,7 +72,7 @@ struct Snapshot {
     std::string history_error;
 };
 struct Config {
-    bool show_obs{true};
+    bool show_obs{};
     bool check_updates{true};
     bool auto_update{};
     bool enabled{true};

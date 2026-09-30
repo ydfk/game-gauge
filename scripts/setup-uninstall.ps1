@@ -12,6 +12,12 @@ Get-Service GameGauge.Sensor -ErrorAction SilentlyContinue | Stop-Service -Force
 . (Join-Path $PSScriptRoot 'setup-processes.ps1')
 Stop-GameGaugeProcesses -Directory $taskDestination
 Unregister-ScheduledTask -TaskName 'GameGauge.StartAfterInstall' -Confirm:$false -ErrorAction SilentlyContinue
+. (Join-Path $PSScriptRoot 'setup-shortcuts.ps1')
+$taskShortcutPath = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'GameGauge.lnk'
+Remove-GameGaugeShortcutName -Path $taskShortcutPath
+Remove-Item -LiteralPath $taskShortcutPath -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '卸载游戏仪表.lnk') -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) '游戏仪表.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) '卸载游戏仪表 GameGauge.lnk') -ErrorAction SilentlyContinue

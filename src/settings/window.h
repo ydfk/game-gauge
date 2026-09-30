@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace gauge {
+inline constexpr DWORD settings_window_style = WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX;
 class SettingsWindow {
 public:
     explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0);
@@ -36,6 +37,9 @@ private:
     void toggle(const std::wstring& title, const std::wstring& hint, bool value, D2D1_RECT_F rect, std::function<void(float)> click);
     void slider(const std::wstring& title, const std::wstring& value, float selected, D2D1_RECT_F rect, std::function<void(float)> click);
     void navigation(float width, float height);
+    void window_controls(float width);
+    std::optional<LRESULT> chrome_message(UINT message, WPARAM wparam, LPARAM lparam);
+    void quit_program();
     void overview(float width);
     void metrics(float width);
     void hardware(float width);
@@ -44,6 +48,9 @@ private:
     void metrics_page(float width);
     void games_page(float width);
     void history_page(float width);
+    void history_detail(float width);
+    void history_chart(const Json& record, const std::string& metric, D2D1_RECT_F rect, D2D1_COLOR_F color);
+    void export_history(const Json& record);
     void updates_page(float width);
     void list_surface(D2D1_RECT_F rect, bool selected = false);
     void row_action(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> action, bool accent = false);
@@ -64,6 +71,13 @@ private:
     Microsoft::WRL::ComPtr<IDWriteTextFormat> title_, heading_, body_, small_, mono_, button_format_;
     Json status_{Json::object()}, targets_{Json::array()};
     Json history_{Json::array()};
+    Json history_dates_{Json::array()}, history_detail_{Json::object()};
+    std::string history_day_, history_selected_;
+    double history_seconds_{};
+    size_t history_date_page_{};
+    int history_tab_{}, history_metric_{};
+    bool disk_details_{};
+    size_t disk_page_{};
     Config config_;
     std::vector<Hotspot> hotspots_;
     std::string error_;
@@ -74,5 +88,9 @@ private:
     size_t history_count_{};
     int focused_{-1};
     float scale_{1};
+    UINT snapshot_dpi_{};
+    int chrome_hover_{};
+    bool quitting_{};
+    unsigned connection_failures_{};
 };
 }

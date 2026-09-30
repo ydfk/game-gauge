@@ -5,6 +5,7 @@
 #include <windowsx.h>
 #include <wincodec.h>
 #include <shellapi.h>
+#include <dwmapi.h>
 #include <algorithm>
 #include <format>
 #include <stdexcept>
@@ -48,11 +49,17 @@ SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid) : instance_(i
     const auto initial_scale = ui_scale(GetDpiForSystem(), work);
     const int window_width = static_cast<int>(1180 * initial_scale);
     const int window_height = static_cast<int>(810 * initial_scale);
-    window_ = CreateWindowExW(0, cls.lpszClassName, L"游戏仪表 · 设置", WS_OVERLAPPEDWINDOW,
+    window_ = CreateWindowExW(0, cls.lpszClassName, L"游戏仪表 · 设置", settings_window_style,
         work.left + (work.right - work.left - window_width) / 2,
         work.top + (work.bottom - work.top - window_height) / 2,
         window_width, window_height, nullptr, nullptr, instance, this);
     if (!window_) throw std::runtime_error(error_text(GetLastError()));
+    DeleteMenu(GetSystemMenu(window_, FALSE), SC_MINIMIZE, MF_BYCOMMAND);
+    const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
+    DwmSetWindowAttribute(window_, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+    const COLORREF border = RGB(42, 59, 77);
+    DwmSetWindowAttribute(window_, DWMWA_BORDER_COLOR, &border, sizeof(border));
+    const MARGINS margins{1, 1, 1, 1}; DwmExtendFrameIntoClientArea(window_, &margins);
     const auto scale = ui_scale(GetDpiForWindow(window_), work);
     const int final_width = static_cast<int>(1180 * scale), final_height = static_cast<int>(810 * scale);
     SetWindowPos(window_, nullptr, work.left + (work.right - work.left - final_width) / 2,
@@ -93,11 +100,18 @@ void SettingsWindow::refresh() {
         if (!host_process_) host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, status_.at("host_pid").get<DWORD>()));
         config_ = config_from_json(status_.at("config"));
         targets_ = ipc_request({{"command", "targets"}}).value("targets", Json::array());
-        const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 4}, {"limit", 4}});
-        history_ = history.value("history", Json::array());
-        history_count_ = history.value("total", size_t{});
-        error_.clear();
-    } catch (const std::exception& e) { error_ = e.what(); }
+        if (page_ == 3) {
+            const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 2}, {"limit", 2}, {"day", history_day_}});
+            history_ = history.value("history", Json::array());
+            history_count_ = history.value("total", size_t{});
+            history_dates_ = history.value("dates", Json::array()); history_seconds_ = history.value("active_seconds", 0.0);
+            if (!history_selected_.empty()) history_detail_ = ipc_request({{"command", "history_detail"}, {"id", history_selected_}}).value("record", Json::object());
+        }
+        connection_failures_ = 0; error_.clear();
+    } catch (const IpcConnectionError& e) {
+        if (host_process_ && WaitForSingleObject(host_process_.value, 0) == WAIT_OBJECT_0) { DestroyWindow(window_); return; }
+        if (++connection_failures_ >= 3) error_ = e.what();
+    } catch (const std::exception& e) { connection_failures_ = 0; error_ = e.what(); }
     if (window_) InvalidateRect(window_, nullptr, FALSE);
 }
 void SettingsWindow::apply() {
@@ -144,6 +158,22 @@ void SettingsWindow::recreate_target() {
 }
 void SettingsWindow::render_to_png(const std::wstring& path, int page) {
     page_ = std::clamp(page, 0, 4);
+    refresh();
+    wchar_t selected[128]{}, tab[16]{}, disk[16]{};
+    // 仅离屏验证模式读取这些参数，不改变正常用户配置。
+    if (GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_HISTORY_ID", selected, 128)) {
+        history_selected_ = utf8(selected); refresh();
+        GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_HISTORY_TAB", tab, 16);
+        history_tab_ = std::clamp(_wtoi(tab), 0, 3);
+    }
+    disk_details_ = GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_DISKS", disk, 16) > 0;
+    wchar_t dpi[16]{};
+    if (GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_DPI", dpi, 16)) {
+        snapshot_dpi_ = static_cast<UINT>(std::clamp(_wtoi(dpi), 96, 192));
+        const auto factor = std::min(snapshot_dpi_ / 96.f, 1.4f);
+        RECT size{0, 0, static_cast<LONG>(1164 * factor), static_cast<LONG>(770 * factor)};
+        SetWindowPos(window_, nullptr, 0, 0, size.right - size.left, size.bottom - size.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     RECT client{}; GetClientRect(window_, &client);
     const auto width = static_cast<UINT>(client.right), height = static_cast<UINT>(client.bottom);
     Microsoft::WRL::ComPtr<IWICImagingFactory> imaging;
@@ -238,9 +268,11 @@ void SettingsWindow::navigation(float width, float height) {
         label(symbols[i], 32, y + 12, 28, 22, mono_.Get(), page_ == i ? mint : muted);
         label(names[i], 74, y + 11, 130, 24, body_.Get(), page_ == i ? white : muted);
         add(D2D1::RectF(16, y, 220, y + 48), [this, i](float) {
-            page_ = i; focused_ = -1; InvalidateRect(window_, nullptr, FALSE);
+            page_ = i; focused_ = -1; if (page_ == 3) refresh(); InvalidateRect(window_, nullptr, FALSE);
         });
     }
+    button(quitting_ ? L"正在退出…" : L"退出程序", D2D1::RectF(28, height - 151, 208, height - 113),
+        [this](float) { quit_program(); });
     line(28, height - 104, 208, height - 104, edge);
     label(L"游戏仪表", 28, height - 81, 190, 20, small_.Get(), muted);
     label(L"版本 " + wide(GAMEGAUGE_VERSION), 28, height - 55, 180, 20, small_.Get(), muted);
@@ -249,13 +281,14 @@ void SettingsWindow::navigation(float width, float height) {
 void SettingsWindow::paint() {
     if (!target_) recreate_target();
     RECT client{}; GetClientRect(window_, &client);
-    scale_ = ui_scale(GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
+    scale_ = ui_scale(snapshot_dpi_ ? snapshot_dpi_ : GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
     scale_ = std::max(.1f, std::min({scale_, client.right / 1164.f, client.bottom / 770.f}));
     const float width = client.right / scale_, height = client.bottom / scale_;
     hotspots_.clear();
     target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
     target_->Clear(background);
     navigation(width, height);
+    window_controls(width);
     const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
     const wchar_t* page_subtitles[]{L"调整监控条的样式和位置。", L"同类指标会在监控条中显示在一起。",
         L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。", L"保持最新，保留你的设置和游戏历史。"};
@@ -292,11 +325,12 @@ LRESULT CALLBACK SettingsWindow::procedure(HWND window, UINT message, WPARAM wpa
 }
 LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
     try {
+        if (const auto handled = chrome_message(message, wparam, lparam)) return *handled;
         switch (message) {
         case WM_GETMINMAXINFO: {
             auto info = reinterpret_cast<MINMAXINFO*>(lparam);
             const auto work = monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTOPRIMARY));
-            const auto scale = ui_scale(GetDpiForWindow(window_), work);
+            const auto scale = ui_scale(snapshot_dpi_ ? snapshot_dpi_ : GetDpiForWindow(window_), work);
             info->ptMinTrackSize = POINT{static_cast<LONG>(950 * scale), static_cast<LONG>(720 * scale)}; return 0;
         }
         case WM_SIZE:
@@ -306,6 +340,10 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
         case WM_DPICHANGED: {
             const auto suggested = *reinterpret_cast<RECT*>(lparam);
             const auto work = monitor_work(MonitorFromRect(&suggested, MONITOR_DEFAULTTONEAREST));
+            if (IsZoomed(window_)) {
+                SetWindowPos(window_, nullptr, work.left, work.top, work.right - work.left, work.bottom - work.top, SWP_NOZORDER | SWP_NOACTIVATE);
+                InvalidateRect(window_, nullptr, FALSE); return 0;
+            }
             const auto scale = ui_scale(HIWORD(wparam), work);
             const int width = static_cast<int>(1180 * scale), height = static_cast<int>(810 * scale);
             const int x = std::clamp(suggested.left, work.left, work.right - width);
