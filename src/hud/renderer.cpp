@@ -14,6 +14,17 @@ std::wstring number(const Metric& metric, const wchar_t* unit = L"", int digits 
     if (!metric.value || metric.state != State::valid) return L"—";
     return std::format(L"{:.{}f}{}", *metric.value, digits, unit);
 }
+D2D1_COLOR_F hud_color(MetricTone tone) {
+    switch (tone) {
+    case MetricTone::good: return D2D1::ColorF(0x65FF9C);
+    case MetricTone::cool: return D2D1::ColorF(0x64DAFF);
+    case MetricTone::watch: return D2D1::ColorF(0xFFE052);
+    case MetricTone::high: return D2D1::ColorF(0xFFB347);
+    case MetricTone::critical: return D2D1::ColorF(0xFF657C);
+    case MetricTone::muted: return D2D1::ColorF(0xB9C9DB);
+    default: return D2D1::ColorF(0xFFFFFF);
+    }
+}
 }
 std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
     auto gpu = std::find_if(s.hardware.gpus.begin(), s.hardware.gpus.end(), [&](const Gpu& item) { return item.id == s.selected_gpu; });
@@ -53,7 +64,7 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         else if (id == "process_memory") { item.label = L"游戏内存"; item.value = s.process_memory.value ? std::format(L"{:.1f} GiB", *s.process_memory.value / 1073741824.0) : L"—"; }
         else if (id == "session") { item.label = L"游玩"; const auto t = static_cast<int>(s.session_seconds); item.value = std::format(L"{:02}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60); }
         else continue;
-        item.color = D2D1::ColorF(tone_rgb(metric_tone(id, s)));
+        item.color = hud_color(metric_tone(id, s));
         item.group = id.starts_with("cpu_") || id == "process_cpu" ? L"CPU" :
             id.starts_with("gpu_") || id == "vram" ? L"GPU" :
             id.starts_with("memory_") || id == "process_memory" ? L"内存" : id == "disk_temperature" ? L"硬盘" : id == "session" ? L"时间" : L"帧率";
@@ -63,14 +74,16 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         items.push_back(std::move(item));
     }
     if (config.show_obs) {
-        items.push_back({L"OBS", obs_label(s.obs_state), D2D1::ColorF(tone_rgb(obs_tone(s.obs_state))), L"OBS"});
+        const auto value = s.obs_state == "paused" ? L"Ⅱ 录制已暂停 · 记得恢复" : obs_label(s.obs_state);
+        // 状态放在最前面，窄游戏窗口裁切时仍优先可见。
+        items.insert(items.begin(), {L"OBS", value, hud_color(obs_tone(s.obs_state)), L"OBS", s.obs_state});
     }
     return items;
 }
 namespace {
 Microsoft::WRL::ComPtr<IDWriteTextFormat> hud_format(IDWriteFactory* write, const Config& config) {
     Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
-    check(write->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL,
+    check(write->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(config.font_size), L"zh-CN", &format));
     format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP); return format;
 }
@@ -86,32 +99,44 @@ D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>&
         if (!previous.empty()) width += previous != item.group ? 20.f : 8.f;
         if (!item.label.empty()) width += item_width(write, format.Get(), item.label) + 4;
         width += item_width(write, format.Get(), item.value); previous = item.group;
+        if (!item.status.empty()) width += 16;
     }
     return D2D1::SizeF(width, static_cast<float>(config.font_size * 1.35 + 2 + (config.graph ? 40 : 0)));
 }
 void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config, float width, float height) {
     const auto format = hud_format(write, config);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    check(target->CreateSolidColorBrush(D2D1::ColorF(.025f, .035f, .05f, static_cast<float>(config.opacity)), &brush));
+    check(target->CreateSolidColorBrush(D2D1::ColorF(0x142438, static_cast<float>(config.opacity)), &brush));
     target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 3, 3), brush.Get());
     float x = 5; std::wstring previous;
     const float bottom = static_cast<float>(config.font_size * 1.35 + 2);
     for (const auto& item : items) {
         if (!previous.empty()) {
             if (previous != item.group) {
-                brush->SetColor(D2D1::ColorF(.5f, .6f, .7f, .55f));
+                brush->SetColor(D2D1::ColorF(0xA3C2DC, .8f));
                 target->DrawLine(D2D1::Point2F(x + 10, 4), D2D1::Point2F(x + 10, bottom - 4), brush.Get(), 1);
                 x += 20;
             } else x += 8;
         }
+        const bool badge = !item.status.empty();
+        if (badge) {
+            const float badge_width = item_width(write, format.Get(), item.label) + 4 + item_width(write, format.Get(), item.value) + 16;
+            // 仅底色缓慢变化，暂停文字始终保持高对比度，不闪烁或消失。
+            const float pulse = .5f + .5f * std::sin(static_cast<float>(GetTickCount64() % 3000) * 6.2831853f / 3000.f);
+            const auto color = item.status == "paused" ? D2D1::ColorF(1.f, .66f + .18f * pulse, .12f) :
+                item.status == "recording" ? D2D1::ColorF(0x65FF9C) : D2D1::ColorF(0xFFD36A);
+            brush->SetColor(color);
+            target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, 0, x + badge_width, bottom), 3, 3), brush.Get());
+            x += 8;
+        }
         if (!item.label.empty()) {
-            brush->SetColor(D2D1::ColorF(.88f, .9f, .94f));
+            brush->SetColor(D2D1::ColorF(badge ? 0x101A24 : 0xF3FAFF));
             const auto w = item_width(write, format.Get(), item.label);
             target->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), format.Get(), D2D1::RectF(x, 0, x + w + 2, bottom), brush.Get()); x += w + 4;
         }
-        brush->SetColor(item.color); const auto w = item_width(write, format.Get(), item.value);
+        brush->SetColor(badge ? D2D1::ColorF(0x101A24) : item.color); const auto w = item_width(write, format.Get(), item.value);
         target->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format.Get(), D2D1::RectF(x, 0, x + w + 2, bottom), brush.Get());
-        x += w; previous = item.group;
+        x += w + (badge ? 8 : 0); previous = item.group;
     }
 }
 Renderer::Renderer(HWND window) {

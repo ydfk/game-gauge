@@ -8,7 +8,7 @@
 #include <wrl/client.h>
 
 namespace gauge {
-struct HudItem { std::wstring label, value; D2D1_COLOR_F color; std::wstring group; };
+struct HudItem { std::wstring label, value; D2D1_COLOR_F color; std::wstring group; std::string status; };
 std::vector<HudItem> hud_items(const Snapshot& snapshot, const Config& config);
 D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config);
 void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config, float width, float height);

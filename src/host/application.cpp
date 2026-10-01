@@ -124,7 +124,7 @@ Json Application::request(const Json& command) {
         const auto snapshot = this->snapshot();
         Json preview = Json::array();
         for (const auto& item : hud_items(snapshot, config_)) preview.push_back({{"label", utf8(item.label)}, {"value", utf8(item.value)},
-            {"group", utf8(item.group)}, {"color", {item.color.r, item.color.g, item.color.b}}});
+            {"group", utf8(item.group)}, {"status", item.status}, {"color", {item.color.r, item.color.g, item.color.b}}});
         return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(snapshot)},
             {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},

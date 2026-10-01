@@ -56,7 +56,7 @@ void SettingsWindow::appearance_page(float width) {
     for (const auto& row : status_.value("hud_preview", Json::array())) {
         const auto color = row.at("color");
         items.push_back({wide(row.value("label", std::string{})), wide(row.value("value", std::string{})),
-            D2D1::ColorF(color[0].get<float>(), color[1].get<float>(), color[2].get<float>()), wide(row.value("group", std::string{}))});
+            D2D1::ColorF(color[0].get<float>(), color[1].get<float>(), color[2].get<float>()), wide(row.value("group", std::string{})), row.value("status", std::string{})});
     }
     if (items.empty()) items = hud_items(Snapshot{}, config_);
     const auto size = measure_hud_items(write_.Get(), items, config_);
