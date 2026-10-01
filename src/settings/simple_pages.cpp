@@ -1,4 +1,5 @@
 #include "window.h"
+#include "theme.h"
 #include "common/platform.h"
 #include "hud/renderer.h"
 #include "version.h"
@@ -9,10 +10,8 @@
 #include <ctime>
 
 namespace gauge {
+using namespace theme;
 namespace {
-const auto panel = D2D1::ColorF(0x152130), selected = D2D1::ColorF(0x1B2B3C);
-const auto white = D2D1::ColorF(0xF2F6FA), muted = D2D1::ColorF(0x93A7BA);
-const auto mint = D2D1::ColorF(0x6BE3C3), background = D2D1::ColorF(0x0B111B);
 bool contains(const std::vector<std::string>& values, const std::string& value) {
     return std::any_of(values.begin(), values.end(), [&](const auto& item) { return _stricmp(item.c_str(), value.c_str()) == 0; });
 }
@@ -33,11 +32,14 @@ void remember(Config& config, const std::string& path, bool excluded) {
 
 }
 void SettingsWindow::list_surface(D2D1_RECT_F rect, bool checked) {
-    fill(rect, checked ? selected : panel);
+    fill(rect, checked ? panel_high : panel);
     line(rect.left, rect.bottom, rect.right, rect.bottom, D2D1::ColorF(0x2A3B4D));
 }
 void SettingsWindow::row_action(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> action, bool accent) {
-    text(title, rect, small_.Get(), accent ? mint : muted);
+    const bool danger = title == L"删除" || title == L"移除" || title == L"排除";
+    const auto ink = danger ? red : accent ? blue : muted;
+    if (hovered(rect)) fill(rect, tint(ink, pressed(rect) ? .20f : .10f), 6);
+    text(title, rect, button_format_.Get(), hovered(rect) ? ink : accent || danger ? ink : muted);
     add(rect, std::move(action));
 }
 void SettingsWindow::page_buttons(float right, float y, size_t& page, size_t pages, bool reload) {
@@ -98,7 +100,8 @@ void SettingsWindow::metrics_page(float width) {
             const bool valid = sensor.value("state", std::string{}) == "valid" && sensor.value("value", Json{}).is_number();
             list_surface(D2D1::RectF(left, y, left + span, y + 70));
             label(wide(disk.value("name", std::string{})), left + 14, y + 5, span - 130, 27, body_.Get(), white);
-            label(valid ? std::format(L"{:.0f}°C", sensor["value"].get<double>()) : L"不可用", left + span - 108, y + 5, 94, 27, heading_.Get(), valid ? mint : muted);
+            label(valid ? std::format(L"{:.0f}°C", sensor["value"].get<double>()) : L"不可用", left + span - 108, y + 5, 94, 27, mono_.Get(),
+                valid ? D2D1::ColorF(tone_rgb(metric_tone("disk_temperature", std::optional<double>(sensor["value"].get<double>())))) : muted);
             label(wide(sensor.value(valid ? "source" : "reason", std::string{})), left + 14, y + 37, span - 28, 25, small_.Get(), muted); y += 78;
         }
         if (disks.empty()) label(L"未发现可读取的硬盘，等待设备采样。", left, 245, span, 28, body_.Get(), muted);
@@ -111,13 +114,23 @@ void SettingsWindow::metrics_page(float width) {
         {L"内存、硬盘与游戏", {"memory_load", "memory_used", "process_memory", "session", "disk_temperature", "obs"}}};
     float y = 148;
     for (const auto& [name, ids] : groups) {
-        label(name, left, y, span, 27, heading_.Get(), mint); y += 38;
+        label(name, left, y, span, 25, heading_.Get(), white);
+        const float label_width = name.size() * 17.f + 18;
+        line(left + label_width, y + 13, left + span, y + 13, tint(edge, .6f)); y += 32;
         for (size_t i = 0; i < ids.size(); ++i) {
-            const auto id = ids[i]; const float x = left + static_cast<float>(i % 4) * (box + 10), row = y + static_cast<float>(i / 4) * 57;
-            const auto rect = D2D1::RectF(x, row, x + box, row + 48); const bool checked = id == "obs" ? config_.show_obs : contains(config_.metrics, id);
-            fill(rect, checked ? selected : panel, 8);
-            label((checked ? L"✓ " : L"   ") + (id == "obs" ? L"OBS 录制状态" : metric_name(id)), x + 14, row + 3, box - 28, 22, body_.Get(), white);
-            label(id == "obs" ? (checked ? L"已开启" : L"默认关闭") : metric_value(id), x + 28, row + 24, box - 38, 19, small_.Get(), checked ? mint : muted);
+            const auto id = ids[i]; const float x = left + static_cast<float>(i % 4) * (box + 10), row = y + static_cast<float>(i / 4) * 52;
+            const auto rect = D2D1::RectF(x, row, x + box, row + 46); const bool checked = id == "obs" ? config_.show_obs : contains(config_.metrics, id);
+            fill(rect, hovered(rect) ? panel_high : panel, 8);
+            outline(rect, checked ? tint(blue, .5f) : hovered(rect) ? edge : tint(edge, .35f), 8);
+            const auto mark = D2D1::RectF(x + 12, row + 9, x + 27, row + 24);
+            fill(mark, checked ? blue : tint(edge, .65f), 4);
+            if (checked) {
+                line(x + 15, row + 16, x + 18, row + 19, background, 1.5f);
+                line(x + 18, row + 19, x + 24, row + 13, background, 1.5f);
+            }
+            label(id == "obs" ? L"OBS 录制状态" : metric_name(id), x + 36, row + 2, box - 46, 22, body_.Get(), checked ? white : muted);
+            const auto value = id == "obs" ? (checked ? obs_label(status_.value("snapshot", Json::object()).value("obs_state", std::string{})) : L"默认关闭") : metric_value(id);
+            label(value, x + 36, row + 24, box - 46, 19, id == "obs" ? small_.Get() : mono_.Get(), checked ? metric_color(id) : muted);
             add(rect, [this, id](float) {
                 if (id == "obs") { config_.show_obs = !config_.show_obs; apply(); return; }
                 auto& metrics = config_.metrics; const auto it = std::find(metrics.begin(), metrics.end(), id);
@@ -125,9 +138,17 @@ void SettingsWindow::metrics_page(float width) {
                 apply();
             });
         }
-        y += static_cast<float>((ids.size() + 3) / 4) * 57 + 18;
+        y += static_cast<float>((ids.size() + 3) / 4) * 52 + 10;
     }
-    row_action(L"查看各硬盘温度 ›", D2D1::RectF(left, y, left + span, y + 30), [this](float) { disk_details_ = true; }, true);
+    row_action(L"查看各硬盘温度 ›", D2D1::RectF(left, y + 2, left + 166, y + 32), [this](float) { disk_details_ = true; }, true);
+    const wchar_t* labels[]{L"常规", L"活跃", L"留意", L"偏高 / 偏低", L"重点留意"};
+    const MetricTone tones[]{MetricTone::good, MetricTone::cool, MetricTone::watch, MetricTone::high, MetricTone::critical};
+    for (int i = 0; i < 5; ++i) {
+        const float x = left + i * 130.f;
+        fill(D2D1::RectF(x, 686, x + 6, 692), D2D1::ColorF(tone_rgb(tones[i])), 3);
+        label(labels[i], x + 15, 678, 114, 22, small_.Get(), muted);
+    }
+    label(L"OBS 录制中为绿，暂停为红，未录制或未连接为橙。", left, 708, span, 23, small_.Get(), muted);
 }
 void SettingsWindow::choose_process(bool excluded) {
     wchar_t path[32768]{}; OPENFILENAMEW dialog{sizeof(dialog)};
@@ -138,7 +159,7 @@ void SettingsWindow::choose_process(bool excluded) {
 }
 void SettingsWindow::games_page(float width) {
     const float left = 272, right = width - 28, span = right - left;
-    const auto edge = D2D1::ColorF(0x233140), surface = D2D1::ColorF(0x101A27);
+    const auto surface = D2D1::ColorF(0x111D2B);
     const auto name = status_.value("snapshot", Json::object()).value("target", Json::object()).value("name", std::string{});
     label(L"游戏", left, 148, 200, 28, heading_.Get(), white);
     row_action(L"＋ 添加游戏", D2D1::RectF(right - 110, 146, right, 180), [this](float) { choose_process(false); }, true);

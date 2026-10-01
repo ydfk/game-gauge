@@ -2,17 +2,12 @@
 #include "common/platform.h"
 #include "host/ipc_server.h"
 #include <shellapi.h>
+#include <fstream>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
-        if (auto existing = FindWindowW(L"GameGauge.Settings", nullptr)) {
-            // 避免新进程的启动显示参数把已有的最大化窗口还原。
-            ShowWindowAsync(existing, IsIconic(existing) ? SW_RESTORE : (IsZoomed(existing) ? SW_SHOWMAXIMIZED : SW_SHOW));
-            SetForegroundWindow(existing);
-            CoUninitialize(); return 0;
-        }
         int count{}; auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
         wchar_t snapshot[32768]{};
         const auto snapshot_length = GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_SNAPSHOT", snapshot, 32768);
@@ -20,6 +15,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_PAGE", page_text, 16);
         const int page = _wtoi(page_text);
         const bool capture = snapshot_length || (count >= 3 && std::wstring_view(arguments[1]) == L"--snapshot");
+        if (!capture) if (auto existing = FindWindowW(L"GameGauge.Settings", nullptr)) {
+            // 离屏验证独立渲染；正常打开仍复用已有窗口并保留最大化状态。
+            ShowWindowAsync(existing, IsIconic(existing) ? SW_RESTORE : (IsZoomed(existing) ? SW_SHOWMAXIMIZED : SW_SHOW));
+            SetForegroundWindow(existing); LocalFree(arguments); CoUninitialize(); return 0;
+        }
+        gauge::Json fixture;
+        wchar_t fixture_path[32768]{};
+        if (capture && GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_FIXTURE", fixture_path, 32768)) {
+            if (std::filesystem::file_size(fixture_path) > 1048576) throw std::runtime_error("离屏样本过大");
+            std::ifstream stream{std::filesystem::path(fixture_path)}; fixture = gauge::Json::parse(stream);
+        }
         DWORD host_pid{};
         for (int i = 1; i + 1 < count; ++i) {
             if (std::wstring_view(arguments[i]) == L"--host-pid") host_pid = std::stoul(arguments[++i]);
@@ -38,7 +44,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
                 CoUninitialize(); return 0;
             }
         }
-        gauge::SettingsWindow window(instance, host_pid);
+        gauge::SettingsWindow window(instance, host_pid, std::move(fixture));
         if (snapshot_length && snapshot_length < 32768) {
             LocalFree(arguments);
             window.render_to_png(snapshot, page); CoUninitialize(); return 0;

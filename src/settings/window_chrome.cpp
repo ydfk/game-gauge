@@ -1,4 +1,5 @@
 #include "window.h"
+#include "theme.h"
 #include "host/ipc_server.h"
 #include <windowsx.h>
 #include <algorithm>
@@ -13,7 +14,7 @@ void SettingsWindow::quit_program() {
     } catch (const std::exception& error) { error_ = error.what(); }
 }
 void SettingsWindow::window_controls(float width) {
-    const auto color = D2D1::ColorF(0xF2F6FA);
+    const auto color = theme::white;
     const auto maximize = D2D1::RectF(width - 108, 12, width - 64, 46);
     const auto close = D2D1::RectF(width - 60, 12, width - 16, 46);
     if (chrome_hover_ == 1) fill(maximize, D2D1::ColorF(0x1B2B3C), 6);

@@ -2,10 +2,16 @@ name: Release Windows
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable tag to build and publish'
+        required: true
+        type: string
 permissions:
   contents: write
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
   release:
@@ -18,9 +24,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          ref: ${{ inputs.tag || github.ref }}
       - name: Validate tag
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'Use a stable tag such as v1.2.3' }
           "RELEASE_VERSION=$($env:RELEASE_TAG.Substring(1))" >> $env:GITHUB_ENV
@@ -33,7 +40,7 @@ jobs:
       - name: Create draft and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           GH_REPO: ${{ github.repository }}
         run: |
           $release = gh release view $env:RELEASE_TAG --json isDraft 2>$null
@@ -45,8 +52,12 @@ jobs:
           }
           gh release upload $env:RELEASE_TAG "build/package/GameGauge-$env:RELEASE_VERSION-Setup.exe" build/package/SHA256SUMS.txt --clobber
           if ($LASTEXITCODE) { throw 'Asset upload failed' }
-          $metadata = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          # 按标签的 REST 接口只返回已发布版本；草稿必须通过 Release ID 读取。
+          $releaseId = gh release view $env:RELEASE_TAG --json databaseId --jq .databaseId
+          if ($LASTEXITCODE -or "$releaseId" -notmatch '^[1-9]\d*$') { throw 'Draft release lookup failed' }
+          $metadata = gh api "repos/$env:GH_REPO/releases/$releaseId" | ConvertFrom-Json
           if ($LASTEXITCODE) { throw 'Asset verification failed' }
+          if (!$metadata.draft -or $metadata.tag_name -ne $env:RELEASE_TAG -or $metadata.id -ne $releaseId) { throw 'Draft release identity mismatch' }
           $asset = @($metadata.assets | Where-Object name -eq "GameGauge-$env:RELEASE_VERSION-Setup.exe")
           $hash = (Get-FileHash "build/package/GameGauge-$env:RELEASE_VERSION-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($asset.Count -ne 1 -or $asset[0].digest -ne "sha256:$hash") { throw 'Uploaded digest mismatch' }

@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "common/platform.h"
+#include "common/metric_style.h"
 #include <dxgi1_2.h>
 #include <format>
 #include <stdexcept>
@@ -22,23 +23,23 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
     const auto& clock = gpu == s.hardware.gpus.end() ? empty : gpu->clock;
     const auto& power = gpu == s.hardware.gpus.end() ? empty : gpu->power;
     const auto& fan = gpu == s.hardware.gpus.end() ? empty : gpu->fan;
-    const auto green = D2D1::ColorF(.36f, 1.f, .22f), amber = D2D1::ColorF(1.f, .65f, .13f), blue = D2D1::ColorF(.34f, .76f, 1.f), white = D2D1::ColorF(.93f, .95f, .98f);
+    const auto white = D2D1::ColorF(tone_rgb(MetricTone::neutral));
     std::vector<HudItem> items;
     std::wstring previous_group;
     for (const auto& id : config.metrics) {
         HudItem item; item.color = white;
-        if (id == "fps") { item.label = L"FPS"; item.value = number(s.fps); item.color = green; }
-        else if (id == "frametime") { item.label = L"帧时间"; item.value = number(s.frametime, L" ms", 1); item.color = blue; }
-        else if (id == "low1") { item.label = L"1% Low"; item.value = number(s.low1); item.color = green; }
-        else if (id == "low01") { item.label = L"0.1% Low"; item.value = number(s.low01); item.color = green; }
-        else if (id == "cpu_temperature") { item.label = L"CPU"; item.value = number(s.cpu_temperature, L"°C"); item.color = amber; }
-        else if (id == "disk_temperature") { item.label = L"硬盘"; item.value = number(s.disk_temperature, L"°C"); item.color = amber; }
-        else if (id == "cpu_load") { item.label = L"CPU"; item.value = number(s.cpu_load, L"%"); item.color = green; }
-        else if (id == "cpu_clock") { item.label = L"CPU"; item.value = number(s.cpu_clock, L" MHz"); item.color = blue; }
-        else if (id == "gpu_temperature") { item.label = L"GPU"; item.value = number(temperature, L"°C"); item.color = amber; }
-        else if (id == "gpu_load") { item.label = L"GPU"; item.value = number(load, L"%"); item.color = green; }
-        else if (id == "gpu_clock") { item.label = L"GPU"; item.value = number(clock, L" MHz"); item.color = blue; }
-        else if (id == "gpu_power") { item.label = L"GPU"; item.value = number(power, L" W"); item.color = amber; }
+        if (id == "fps") { item.label = L"FPS"; item.value = number(s.fps); }
+        else if (id == "frametime") { item.label = L"帧时间"; item.value = number(s.frametime, L" ms", 1); }
+        else if (id == "low1") { item.label = L"1% Low"; item.value = number(s.low1); }
+        else if (id == "low01") { item.label = L"0.1% Low"; item.value = number(s.low01); }
+        else if (id == "cpu_temperature") { item.label = L"CPU"; item.value = number(s.cpu_temperature, L"°C"); }
+        else if (id == "disk_temperature") { item.label = L"硬盘"; item.value = number(s.disk_temperature, L"°C"); }
+        else if (id == "cpu_load") { item.label = L"CPU"; item.value = number(s.cpu_load, L"%"); }
+        else if (id == "cpu_clock") { item.label = L"CPU"; item.value = number(s.cpu_clock, L" MHz"); }
+        else if (id == "gpu_temperature") { item.label = L"GPU"; item.value = number(temperature, L"°C"); }
+        else if (id == "gpu_load") { item.label = L"GPU"; item.value = number(load, L"%"); }
+        else if (id == "gpu_clock") { item.label = L"GPU"; item.value = number(clock, L" MHz"); }
+        else if (id == "gpu_power") { item.label = L"GPU"; item.value = number(power, L" W"); }
         else if (id == "gpu_fan") { item.label = L"风扇"; item.value = number(fan, L"%"); }
         else if (id == "vram") {
             item.label = L"显存";
@@ -46,12 +47,13 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
                 item.value = std::format(L"{:.1f}/{:.0f}G", *gpu->memory_used.value / 1073741824.0, *gpu->memory_total.value / 1073741824.0);
             else item.value = L"—";
         }
-        else if (id == "memory_load") { item.label = L"内存"; item.value = number(s.memory_load, L"%"); item.color = green; }
+        else if (id == "memory_load") { item.label = L"内存"; item.value = number(s.memory_load, L"%"); }
         else if (id == "memory_used") { item.label = L"内存"; item.value = s.memory_used.value ? std::format(L"{:.1f} GiB", *s.memory_used.value / 1073741824.0) : L"—"; }
-        else if (id == "process_cpu") { item.label = L"游戏 CPU"; item.value = number(s.process_cpu, L"%"); item.color = green; }
+        else if (id == "process_cpu") { item.label = L"游戏 CPU"; item.value = number(s.process_cpu, L"%"); }
         else if (id == "process_memory") { item.label = L"游戏内存"; item.value = s.process_memory.value ? std::format(L"{:.1f} GiB", *s.process_memory.value / 1073741824.0) : L"—"; }
-        else if (id == "session") { item.label = L"运行"; const auto t = static_cast<int>(s.session_seconds); item.value = std::format(L"{:02}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60); }
+        else if (id == "session") { item.label = L"游玩"; const auto t = static_cast<int>(s.session_seconds); item.value = std::format(L"{:02}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60); }
         else continue;
+        item.color = D2D1::ColorF(tone_rgb(metric_tone(id, s)));
         item.group = id.starts_with("cpu_") || id == "process_cpu" ? L"CPU" :
             id.starts_with("gpu_") || id == "vram" ? L"GPU" :
             id.starts_with("memory_") || id == "process_memory" ? L"内存" : id == "disk_temperature" ? L"硬盘" : id == "session" ? L"时间" : L"帧率";
@@ -61,11 +63,7 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         items.push_back(std::move(item));
     }
     if (config.show_obs) {
-        const auto value = s.obs_state == "recording" ? L"● 录制中" : s.obs_state == "paused" ? L"Ⅱ 已暂停" :
-            s.obs_state == "idle" ? L"未录制" : s.obs_state == "disabled" ? L"未启用连接" : L"未连接";
-        const auto color = s.obs_state == "recording" ? D2D1::ColorF(1.f, .3f, .3f) :
-            s.obs_state == "paused" ? amber : D2D1::ColorF(.6f, .65f, .7f);
-        items.push_back({L"OBS", value, color, L"OBS"});
+        items.push_back({L"OBS", obs_label(s.obs_state), D2D1::ColorF(tone_rgb(obs_tone(s.obs_state))), L"OBS"});
     }
     return items;
 }

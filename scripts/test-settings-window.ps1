@@ -42,11 +42,13 @@ public static class SettingsNative {
     }
     public static void CloseButton(IntPtr h) {
         var r = Client(h); var s = Scale(h);
-        SendMessage(h, 0x202, IntPtr.Zero, Position((int)(r.Right-38*s), (int)(29*s)));
+        var p = Position((int)(r.Right-38*s), (int)(29*s));
+        SendMessage(h, 0x201, new IntPtr(1), p); SendMessage(h, 0x202, IntPtr.Zero, p);
     }
     public static void ExitButton(IntPtr h) {
         var r = Client(h); var s = Scale(h);
-        SendMessage(h, 0x202, IntPtr.Zero, Position((int)(100*s), (int)(r.Bottom-132*s)));
+        var p = Position((int)(100*s), (int)(r.Bottom-132*s));
+        SendMessage(h, 0x201, new IntPtr(1), p); SendMessage(h, 0x202, IntPtr.Zero, p);
     }
 }
 '@

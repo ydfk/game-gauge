@@ -1,4 +1,5 @@
 #include "window.h"
+#include "theme.h"
 #include "host/ipc_server.h"
 #include <commdlg.h>
 #include <algorithm>
@@ -9,9 +10,8 @@
 #include <fstream>
 
 namespace gauge {
+using namespace theme;
 namespace {
-const auto panel = D2D1::ColorF(0x152130), white = D2D1::ColorF(0xF2F6FA), muted = D2D1::ColorF(0x93A7BA);
-const auto mint = D2D1::ColorF(0x6BE3C3), blue = D2D1::ColorF(0x71B8FA), amber = D2D1::ColorF(0xFFB75E);
 struct Column { const char* id; const wchar_t* title; const wchar_t* unit; };
 const Column columns[]{
     {"fps", L"FPS", L""}, {"cpu_load", L"CPU 占用", L"%"}, {"cpu_temperature", L"CPU 温度", L"°C"},
@@ -36,6 +36,11 @@ Json stat_for(const Json& row, const std::string& id) {
     if (id == "fps") return {{"average", row.value("average_fps", Json{})}, {"maximum", row.value("maximum_fps", Json{})}, {"minimum", nullptr}};
     if (id == "cpu_temperature" || id == "gpu_temperature") return {{"average", nullptr}, {"maximum", row.value(id == "cpu_temperature" ? "cpu_max_celsius" : "gpu_max_celsius", Json{})}, {"minimum", nullptr}};
     return Json::object();
+}
+D2D1_COLOR_F stat_color(const std::string& id, const Json& value) {
+    if (id == "vram") return value.is_number() ? white : muted;
+    const auto numeric = value.is_number() ? std::optional<double>(value.get<double>()) : std::nullopt;
+    return D2D1::ColorF(tone_rgb(metric_tone(id, numeric)));
 }
 std::wstring status_text(const Json& row) {
     const auto status = row.value("status", std::string{});
@@ -91,7 +96,7 @@ void SettingsWindow::history_page(float width) {
             const auto& column = columns[i]; const auto stat = stat_for(row, column.id); const float x = left + 16 + i * box;
             if (i) line(x - 8, y + 82, x - 8, y + 174, D2D1::ColorF(0x2A3B4D));
             label(std::wstring(column.title) + L" · 平均", x, y + 75, box - 12, 24, small_.Get(), muted);
-            label(reading(stat.value("average", Json{}), column.unit), x, y + 101, box - 12, 29, heading_.Get(), i == 0 ? mint : white);
+            label(reading(stat.value("average", Json{}), column.unit), x, y + 101, box - 12, 29, data_.Get(), stat_color(column.id, stat.value("average", Json{})));
             label(L"最高 " + reading(stat.value("maximum", Json{})), x, y + 136, box - 12, 20, small_.Get(), muted);
             label(L"最低 " + reading(stat.value("minimum", Json{})), x, y + 159, box - 12, 20, small_.Get(), muted);
         }
@@ -123,7 +128,8 @@ void SettingsWindow::history_chart(const Json& row, const std::string& metric, D
     if (!index || series.empty() || !stat.value("maximum", Json{}).is_number()) {
         label(L"没有该指标的有效曲线数据", plot.left + 14, plot.top + 20, plot.right - plot.left - 28, 28, small_.Get(), muted); return;
     }
-    const double minimum = stat.value("minimum", 0.0), maximum = stat.value("maximum", 1.0);
+    const auto minimum_value = stat.value("minimum", Json{});
+    const double minimum = minimum_value.is_number() ? minimum_value.get<double>() : 0.0, maximum = stat["maximum"].get<double>();
     const double low = std::max(0.0, minimum - std::max(1.0, (maximum - minimum) * .15));
     const double high = std::max(low + 1, maximum + std::max(1.0, (maximum - minimum) * .15));
     const double end = std::max({1.0, series.back()[0].get<double>(), row.value("duration_seconds", 0.0)});
@@ -188,7 +194,7 @@ void SettingsWindow::history_detail(float width) {
             const float x = left + i % 4 * (box + 10), y = 268.f + i / 4 * 99;
             fill(D2D1::RectF(x, y, x + box, y + 88), panel, 7);
             label(column.title, x + 12, y + 5, box - 24, 22, small_.Get(), muted);
-            label(reading(stat.value("average", Json{}), column.unit), x + 12, y + 29, box - 24, 26, heading_.Get(), mint);
+            label(reading(stat.value("average", Json{}), column.unit), x + 12, y + 29, box - 24, 26, data_.Get(), stat_color(column.id, stat.value("average", Json{})));
             label(L"↑ " + reading(stat.value("maximum", Json{})) + L"   ↓ " + reading(stat.value("minimum", Json{})), x + 12, y + 60, box - 24, 22, small_.Get(), muted);
         }
         const wchar_t* selectors[]{L"FPS", L"CPU", L"GPU", L"CPU 温度", L"内存", L"硬盘"}; const int indexes[]{0, 1, 3, 2, 5, 6};

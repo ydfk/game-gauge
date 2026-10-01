@@ -12,7 +12,7 @@ namespace gauge {
 inline constexpr DWORD settings_window_style = WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX;
 class SettingsWindow {
 public:
-    explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0);
+    explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0, Json fixture = Json{});
     int run();
     void render_to_png(const std::wstring& path, int page = 0);
 private:
@@ -33,7 +33,11 @@ private:
     void line(float x1, float y1, float x2, float y2, D2D1_COLOR_F color, float stroke = 1);
     void text(const std::wstring& value, D2D1_RECT_F rect, IDWriteTextFormat* format, D2D1_COLOR_F color);
     void label(const std::wstring& value, float x, float y, float width, float height, IDWriteTextFormat* format, D2D1_COLOR_F color);
-    void button(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> click, bool active = false);
+    void button(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> click, bool active = false, bool danger = false);
+    void outline(D2D1_RECT_F rect, D2D1_COLOR_F color, float radius = 8, float stroke = 1);
+    bool hovered(D2D1_RECT_F rect) const;
+    bool pressed(D2D1_RECT_F rect) const;
+    std::optional<LRESULT> interaction_message(UINT message, WPARAM wparam, LPARAM lparam);
     void toggle(const std::wstring& title, const std::wstring& hint, bool value, D2D1_RECT_F rect, std::function<void(float)> click);
     void slider(const std::wstring& title, const std::wstring& value, float selected, D2D1_RECT_F rect, std::function<void(float)> click);
     void navigation(float width, float height);
@@ -60,6 +64,7 @@ private:
     std::wstring metric_name(const std::string& id) const;
     std::wstring metric_value(const std::string& id) const;
     std::wstring metric_detail(const std::string& id) const;
+    D2D1::ColorF metric_color(const std::string& id) const;
     void add(D2D1_RECT_F rect, std::function<void(float)> click, std::function<void(int)> adjust = {});
     HINSTANCE instance_{};
     UniqueHandle host_process_;
@@ -68,7 +73,7 @@ private:
     Microsoft::WRL::ComPtr<ID2D1RenderTarget> target_;
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> hwnd_target_;
     Microsoft::WRL::ComPtr<IDWriteFactory> write_;
-    Microsoft::WRL::ComPtr<IDWriteTextFormat> title_, heading_, body_, small_, mono_, button_format_;
+    Microsoft::WRL::ComPtr<IDWriteTextFormat> title_, heading_, body_, small_, mono_, data_, button_format_;
     Json status_{Json::object()}, targets_{Json::array()};
     Json history_{Json::array()};
     Json history_dates_{Json::array()}, history_detail_{Json::object()};
@@ -92,5 +97,8 @@ private:
     int chrome_hover_{};
     bool quitting_{};
     unsigned connection_failures_{};
+    bool fixture_mode_{}, pointer_inside_{};
+    D2D1_POINT_2F pointer_{};
+    std::optional<Hotspot> pressed_;
 };
 }

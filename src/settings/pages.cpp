@@ -1,26 +1,19 @@
 #include "window.h"
+#include "theme.h"
 #include "common/platform.h"
 #include <algorithm>
 #include <format>
 
 namespace gauge {
+using namespace theme;
 namespace {
-const auto background = D2D1::ColorF(0x0B111B);
-const auto panel = D2D1::ColorF(0x152130);
-const auto panel_high = D2D1::ColorF(0x1B2B3C);
-const auto edge = D2D1::ColorF(0x2A3B4D);
-const auto white = D2D1::ColorF(0xF2F6FA);
-const auto muted = D2D1::ColorF(0x93A7BA);
-const auto mint = D2D1::ColorF(0x6BE3C3);
-const auto amber = D2D1::ColorF(0xFFB75E);
-const auto blue = D2D1::ColorF(0x71B8FA);
 const std::vector<std::pair<std::string, std::wstring>> all_metrics{
     {"fps", L"FPS"}, {"frametime", L"帧时间"}, {"low1", L"1% Low"}, {"low01", L"0.1% Low"},
     {"cpu_temperature", L"CPU 温度"}, {"cpu_load", L"CPU 占用"}, {"cpu_clock", L"CPU 频率"},
     {"gpu_temperature", L"GPU 温度"}, {"gpu_load", L"GPU 占用"}, {"gpu_clock", L"GPU 频率"},
     {"gpu_power", L"GPU 功耗"}, {"gpu_fan", L"GPU 风扇"}, {"vram", L"显存用量"},
     {"memory_load", L"内存占用"}, {"memory_used", L"内存用量"}, {"process_cpu", L"游戏 CPU"},
-    {"process_memory", L"游戏内存"}, {"disk_temperature", L"硬盘温度"}, {"session", L"运行时长"}
+    {"process_memory", L"游戏内存"}, {"disk_temperature", L"硬盘温度"}, {"session", L"游玩时长"}
 };
 std::wstring reading(const Json& metric, const wchar_t* unit = L"", int precision = 0) {
     if (!metric.is_object() || metric.value("state", std::string{}) != "valid" || !metric.contains("value") || metric["value"].is_null()) return L"—";
@@ -29,6 +22,11 @@ std::wstring reading(const Json& metric, const wchar_t* unit = L"", int precisio
 std::wstring text_field(const Json& object, const char* field) {
     return object.is_object() && object.contains(field) && object[field].is_string() ? wide(object[field].get<std::string>()) : L"—";
 }
+}
+D2D1::ColorF SettingsWindow::metric_color(const std::string& id) const {
+    const auto snapshot = status_.value("snapshot", Json::object());
+    const auto tone = id == "obs" ? obs_tone(snapshot.value("obs_state", std::string{})) : metric_tone(id, snapshot);
+    return D2D1::ColorF(tone_rgb(tone));
 }
 std::wstring SettingsWindow::metric_name(const std::string& id) const {
     auto it = std::find_if(all_metrics.begin(), all_metrics.end(), [&](const auto& item) { return item.first == id; });
@@ -99,7 +97,7 @@ void SettingsWindow::metric_preview(float x, float y, float width) {
         const float cell = std::max(82.f, std::min(142.f, (width - 65) / 7.f));
         if (cursor + cell > x + width - 16) break;
         label(name, cursor, y + 64, cell - 6, 18, small_.Get(), muted);
-        label(value, cursor, y + 83, cell - 6, 23, mono_.Get(), i % 3 == 0 ? mint : i % 3 == 1 ? amber : blue);
+        label(value, cursor, y + 83, cell - 6, 23, mono_.Get(), metric_color(config_.metrics[i]));
         cursor += cell;
     }
 }
@@ -145,7 +143,7 @@ void SettingsWindow::metrics(float width) {
         fill(D2D1::RectF(x + 13, y + 11, x + 32, y + 30), selected ? mint : edge, 4);
         if (selected) label(L"✓", x + 15, y + 10, 16, 18, small_.Get(), background);
         label(all_metrics[i].second, x + 44, y + 9, half - 150, 23, body_.Get(), selected ? white : muted);
-        label(metric_value(id), x + half - 116, y + 9, 102, 23, mono_.Get(), selected ? mint : muted);
+        label(metric_value(id), x + half - 116, y + 9, 102, 23, mono_.Get(), selected ? metric_color(id) : muted);
         add(rect, [this, id](float) {
             selected_metric_ = id;
             auto& values = config_.metrics;

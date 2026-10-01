@@ -23,6 +23,20 @@ git push origin v0.1.1
 
 工作流仅需内置 `GITHUB_TOKEN` 的 `contents: write`。没有第三方上传 Action；checkout 固定为提交。失败时不会公开半成品 Release，同 Tag 重跑只允许恢复草稿，已发布版本拒绝覆盖。
 
+## 恢复失败的草稿
+
+附件上传后出现 `Asset verification failed` 和 404 时，先查看失败步骤。按标签查询的 REST 接口只返回已发布版本，不能用来校验草稿；当前流程先用 `gh release view` 获取 Release ID，再按 ID 读取草稿、确认标签与草稿身份、校验附件摘要，最后公开发布。`untagged-…` 是草稿的临时网址，实际标签以 `tagName` 为准。
+
+如果工作流本身已修复，先提交并推送修复到 `main`。不要直接在旧任务上点击 Re-run jobs：旧任务仍使用原提交和旧工作流。进入 Actions → Release Windows → Run workflow，选择 `main`，输入需要恢复的已有标签，例如 `v0.0.1`。也可执行：
+
+```powershell
+gh workflow run release.yml --repo ydfk/game-gauge --ref main -f tag=v0.0.1
+```
+
+手动恢复构建已有标签对应的源码；不移动标签，也不使用 `main` 上的新应用源码。要发布新应用改动，请创建更高版本的新标签。已有草稿可恢复并重新上传附件；已公开发布的版本仍拒绝覆盖。
+
+本地发布逻辑回归使用 `./scripts/test-release-workflow.ps1`，模拟 GitHub CLI 执行真实工作流中的发布脚本，覆盖新建／恢复草稿、已发布版本保护、摘要错误及身份校验，不进行远程写入。
+
 ## 软件更新
 
 “版本与更新”提供三个手动步骤：检查更新 → 下载更新 → 安装更新。也可直接下载 Release 的安装包覆盖安装。

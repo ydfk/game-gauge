@@ -14,9 +14,11 @@ void require(bool condition, const char* message) { if (!condition) throw std::r
 void close(double actual, double expected, const char* message) { require(std::abs(actual - expected) < 0.001, message); }
 }
 void telemetry_regressions();
+void metric_style_contracts();
 int main() {
     try {
         telemetry_regressions();
+        metric_style_contracts();
         std::vector<double> values(990, 10); values.insert(values.end(), 10, 50);
         close(gauge::slow_tail_fps(values, .01), 20, "1% Low must average the slowest frame times");
         close(gauge::slow_tail_fps({10, 20, 30}, .01), 1000.0 / 30, "small samples use ceil");
