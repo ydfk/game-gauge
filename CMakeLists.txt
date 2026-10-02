@@ -23,9 +23,9 @@ if(MSVC)
   add_compile_options(/W4 /permissive- /utf-8 /EHsc)
 endif()
 add_library(gauge_common STATIC
-  src/common/config.cpp src/common/frame_statistics.cpp src/common/history.cpp src/common/metric_style.cpp src/common/platform.cpp src/common/sample_validation.cpp src/common/update_release.cpp)
+  src/common/config.cpp src/common/frame_statistics.cpp src/common/game_identity.cpp src/common/history.cpp src/common/metric_style.cpp src/common/platform.cpp src/common/sample_validation.cpp src/common/update_release.cpp)
 target_include_directories(gauge_common PUBLIC src third_party)
-target_link_libraries(gauge_common PUBLIC shell32 advapi32)
+target_link_libraries(gauge_common PUBLIC shell32 advapi32 version)
 add_library(gauge_metrics STATIC
   src/metrics/cpu_temperature.cpp src/metrics/disk.cpp src/metrics/hardware.cpp src/metrics/nvidia.cpp src/metrics/presentmon.cpp
   src/metrics/sampler.cpp src/metrics/target.cpp)
@@ -42,7 +42,7 @@ add_executable(GameGauge.CpuProbe src/diagnostics/cpu_temperature_probe.cpp)
 target_include_directories(GameGauge.CpuProbe PRIVATE src)
 target_link_libraries(GameGauge.CpuProbe PRIVATE bcrypt advapi32)
 add_executable(GameGauge.Settings WIN32
-  src/settings/main.cpp src/settings/window.cpp src/settings/controls.cpp src/settings/window_chrome.cpp src/settings/pages.cpp src/settings/simple_pages.cpp src/settings/history_page.cpp src/host/ipc_server.cpp src/hud/renderer.cpp src/host/app.rc)
+  src/settings/main.cpp src/settings/window.cpp src/settings/controls.cpp src/settings/window_chrome.cpp src/settings/pages.cpp src/settings/simple_pages.cpp src/settings/history_page.cpp src/settings/game_identity.cpp src/host/ipc_server.cpp src/hud/renderer.cpp src/host/app.rc)
 target_link_libraries(GameGauge.Settings PRIVATE gauge_common d2d1 dwrite windowscodecs comdlg32 d3d11 dcomp dwmapi)
 target_link_options(GameGauge.Settings PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.RenderProbe WIN32 tests/render_probe.cpp)

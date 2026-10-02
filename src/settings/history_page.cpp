@@ -80,7 +80,7 @@ void SettingsWindow::history_page(float width) {
     float y = 248;
     for (const auto& row : history_) {
         fill(D2D1::RectF(left, y, right, y + 190), panel, 10);
-        label(wide(row.value("game", std::string{})), left + 16, y + 10, span - 280, 27, heading_.Get(), white);
+        game_identity(row, left + 16, y + 7, span - 220);
         row_action(L"详情", D2D1::RectF(right - 178, y + 7, right - 123, y + 38), [this, id = row.at("id").get<std::string>()](float) {
             history_selected_ = id; history_tab_ = 0; history_metric_ = 0; refresh();
         }, true);
@@ -90,7 +90,7 @@ void SettingsWindow::history_page(float width) {
             catch (const std::exception& e) { error_ = e.what(); }
         });
         label(time_text(row.value("started_ms", 0ull)) + L"  ·  " + duration(row.value("active_seconds", 0.0)) + L"  ·  " + status_text(row),
-            left + 16, y + 41, span - 32, 24, small_.Get(), muted);
+            left + 16, y + 48, span - 32, 24, small_.Get(), muted);
         const float box = (span - 32) / 6;
         for (int i = 0; i < 6; ++i) {
             const auto& column = columns[i]; const auto stat = stat_for(row, column.id); const float x = left + 16 + i * box;
@@ -181,7 +181,7 @@ void SettingsWindow::history_detail(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto& row = history_detail_;
     row_action(L"‹ 返回记录", D2D1::RectF(left, 142, left + 100, 174), [this](float) { history_selected_.clear(); refresh(); }, true);
-    label(wide(row.value("game", std::string{})), left + 120, 142, span - 205, 30, heading_.Get(), white);
+    game_identity(row, left + 120, 135, span - 205);
     row_action(L"导出", D2D1::RectF(right - 55, 142, right, 174), [this, row](float) { export_history(row); });
     label(time_text(row.value("started_ms", 0ull)) + L" → " + time_text(row.value("updated_ms", 0ull)) + L"  ·  游玩 " + duration(row.value("active_seconds", 0.0)), left, 182, span, 25, small_.Get(), muted);
     const wchar_t* tabs[]{L"性能报告", L"性能图表", L"会话事件", L"设备信息"};

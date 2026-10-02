@@ -182,3 +182,11 @@
 - GameGauge.HudVisuals 用固定示例渲染五种状态，OBS 顺序及无裁切检查通过，图片在 build/validation/hud-obs-bright.png。核心和 IPC 测试通过。
 - 实际安装及运行版本均为 0.1.11；OBS 实机为 idle，show_obs 为 true。暂停态使用离屏渲染验证，没有操作真实录制。
 - 修改前已通过 HTTPS 拉取 main，远端无新增提交。原 SSH ProxyCommand 存在 shell 兼容问题，未修改用户 SSH 配置。
+
+## 2026-10-02 — 0.1.12 游戏历史标识与监控条显示
+
+- 历史列表和详情增加游戏图标、显示名称、英文进程名。名称读取本地版本资源或窗口中文标题；CONTROLResonant.exe 使用已知中文名称“控制：共振”。未识别到中文名时保留原名，不声称覆盖全部游戏；执行文件不存在时使用通用图标。旧历史无需迁移。
+- 实机 0.1.11：CONTROLResonant.exe PID 53080 前台持续约 35 秒，PresentMon 返回原始帧 0 / 有效帧 0，game_confirmed=false，hud_error 为空。原逻辑把帧可用性作为整条 HUD 的显示门槛。
+- 修复：游戏识别独立于帧采集，已识别/已添加游戏在没有 FPS 时也能显示其他指标；从未收到帧时 FPS 保持缺失，不伪造为 0。暂停 OBS 时即使其他读数不变也继续更新提示亮度。
+- Release 构建、core_contracts、ipc_contracts 均通过。历史列表与详情离屏检查通过，真实可执行文件图标已检查；截图为合成性能数据，不是游戏测量结果。
+- 已安装 0.1.12，安装后的 Settings SHA256 与构建产物一致。PresentMon 服务重启后独立探针仍无帧，此项尚未解决，不能把连接成功当作 FPS 验收通过。

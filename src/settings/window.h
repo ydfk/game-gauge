@@ -52,6 +52,7 @@ private:
     void metrics_page(float width);
     void games_page(float width);
     void history_page(float width);
+    void game_identity(const Json& row, float x, float y, float width);
     void history_detail(float width);
     void history_chart(const Json& record, const std::string& metric, D2D1_RECT_F rect, D2D1_COLOR_F color);
     void export_history(const Json& record);

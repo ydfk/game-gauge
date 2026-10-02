@@ -1,6 +1,7 @@
 #include "history.h"
 #include "platform.h"
 #include "sample_validation.h"
+#include "game_identity.h"
 #include <chrono>
 #include <fstream>
 #include <algorithm>
@@ -120,6 +121,7 @@ void SessionHistory::update(const Snapshot& s, uint64_t wall_ms, const std::func
             {"game", s.target.name}, {"path", s.target.path}, {"started_ms", wall_ms}, {"active_seconds", 0.0},
             {"average_fps", nullptr}, {"maximum_fps", nullptr}, {"cpu_max_celsius", nullptr}, {"gpu_max_celsius", nullptr}};
         e.data["sample_policy"] = 1; e.data["filtered_samples"] = Json::object();
+        e.data["display_name"] = game_display_name(s.target.path, s.target.name, s.target.window);
         e.data["stats"] = Json::object(); e.data["series"] = Json::array(); e.data["events"] = Json::array();
         e.data["series_metrics"] = {"fps", "cpu_load", "cpu_temperature", "gpu_load", "gpu_temperature", "memory_load", "disk_temperature", "frametime", "gpu_power", "vram"};
         e.data["hardware"] = snapshot_json(s);

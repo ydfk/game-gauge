@@ -153,7 +153,8 @@ void Sampler::run(std::stop_token stop) {
         if (target_changed) {
             const auto elapsed = history ? history->active_seconds(current.target) : std::nullopt;
             current.session_seconds = elapsed.value_or(0);
-            current.game_confirmed = elapsed.has_value();
+            // 游戏识别与帧数据可用性独立，帧采集故障不隐藏其他监控项。
+            current.game_confirmed = elapsed.has_value() || recognized_game(current.target, config);
             current.selected_gpu.clear();
         }
         if (reset || target_changed) {
@@ -181,7 +182,7 @@ void Sampler::run(std::stop_token stop) {
             statistics.publish(current, current.timestamp_ms);
             if (active && (current.frame_samples >= 3 || !config.auto_target)) current.game_confirmed = true;
             // 游戏菜单可能停止呈现；已确认且流仍连接时，零帧表示当前没有刷新。
-            if (collecting && current.game_confirmed && current.fps.state == State::waiting &&
+            if (collecting && presentmon.accepted_frame_count() > 0 && current.fps.state == State::waiting &&
                 presentmon.status().starts_with("PresentMon 已连接"))
                 current.fps = available(0, "PresentMon · 当前没有新呈现帧");
             if (collecting && was_foreground && !was_paused && !target_changed)

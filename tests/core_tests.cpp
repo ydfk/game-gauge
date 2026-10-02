@@ -1,6 +1,7 @@
 #include "common/config.h"
 #include "common/frame_statistics.h"
 #include "common/history.h"
+#include "common/game_identity.h"
 #include "common/update_release.h"
 #include "metrics/target.h"
 #include <fstream>
@@ -19,6 +20,14 @@ int main() {
     try {
         telemetry_regressions();
         metric_style_contracts();
+        require(gauge::game_display_name("C:\\Games\\CONTROLResonant.exe", "CONTROLResonant.exe") == "控制：共振", "known game has Chinese title without executable");
+        require(gauge::game_display_name("", "unknown.exe") == "unknown", "missing metadata keeps readable filename");
+        gauge::Target known; known.pid = 123; known.path = "C:\\Games\\Example.exe"; known.name = "Example.exe";
+        gauge::Config known_config; known_config.known_games = {known.path};
+        require(gauge::recognized_game(known, known_config), "saved game must not depend on frame samples");
+        known_config.ignored_processes = {"Example.exe"};
+        require(!gauge::recognized_game(known, known_config), "explicit exclusion takes priority");
+        require(!gauge::recognized_game({}, gauge::Config{}), "empty target must not enable HUD");
         std::vector<double> values(990, 10); values.insert(values.end(), 10, 50);
         close(gauge::slow_tail_fps(values, .01), 20, "1% Low must average the slowest frame times");
         close(gauge::slow_tail_fps({10, 20, 30}, .01), 1000.0 / 30, "small samples use ceil");

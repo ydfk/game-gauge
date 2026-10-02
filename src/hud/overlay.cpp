@@ -87,6 +87,7 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         std::wostringstream key;
         key << config.font_size << config.opacity << config.graph << dpi << size.cx << size.cy;
         for (const auto& item : hud_items(snapshot, config)) key << item.label << item.value;
+        if (config.show_obs && snapshot.obs_state == "paused") key << GetTickCount64() / 100;
         if (config.graph) for (double point : snapshot.recent_frames) key << point;
         const auto signature = utf8(key.str());
         if (signature != last_draw_) { renderer_->render(snapshot, config, dpi, size); last_draw_ = signature; }

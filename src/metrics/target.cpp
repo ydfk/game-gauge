@@ -89,6 +89,12 @@ bool target_alive(const Target& target) {
     return GetProcessTimes(process.value, &started, &exited, &kernel, &user) && file_ticks(started) == target.started;
 }
 bool target_listed(const Target& target, const Config& config) { return !ignored(target, config); }
+bool recognized_game(const Target& target, const Config& config) {
+    if (!target.pid || ignored(target, config)) return false;
+    if (!config.auto_target && target.pid == config.target_pid) return true;
+    for (const auto& path : config.known_games) if (_stricmp(path.c_str(), target.path.c_str()) == 0) return true;
+    return target.window && game_candidate(target, reinterpret_cast<HWND>(target.window), config);
+}
 std::vector<Target> enumerate_targets() {
     std::vector<Target> targets;
     EnumWindows([](HWND window, LPARAM data) -> BOOL {
