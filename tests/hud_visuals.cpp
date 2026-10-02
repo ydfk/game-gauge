@@ -24,7 +24,13 @@ int wmain(int argc, wchar_t** argv) {
         gauge::Config config; config.font_size = 18; config.show_obs = true;
         target->BeginDraw(); target->Clear(D2D1::ColorF(0x33465B));
         float y = 25;
+        size_t row{};
+        const unsigned backgrounds[]{0xDCE4ED, 0x121A20, 0x607259, 0xDACBB7, 0x33465B};
+        ComPtr<ID2D1SolidColorBrush> backdrop; check(target->CreateSolidColorBrush(D2D1::ColorF(0), &backdrop));
         for (const char* state : {"recording", "paused", "idle", "disconnected", "disabled"}) {
+            target->SetTransform(D2D1::Matrix3x2F::Identity());
+            backdrop->SetColor(D2D1::ColorF(backgrounds[row++]));
+            target->FillRectangle(D2D1::RectF(0, y - 15, 1500, y + 40), backdrop.Get());
             s.obs_state = state; const auto items = gauge::hud_items(s, config);
             if (items.empty() || items.front().status != state) throw std::runtime_error("OBS must be first and carry state");
             const auto size = gauge::measure_hud_items(write.Get(), items, config);

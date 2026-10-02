@@ -181,13 +181,10 @@ void Sampler::run(std::stop_token stop) {
             current.timestamp_ms = GetTickCount64();
             statistics.publish(current, current.timestamp_ms);
             if (active && (current.frame_samples >= 3 || !config.auto_target)) current.game_confirmed = true;
-            // 游戏菜单可能停止呈现；已确认且流仍连接时，零帧表示当前没有刷新。
-            if (collecting && presentmon.accepted_frame_count() > 0 && current.fps.state == State::waiting &&
-                presentmon.status().starts_with("PresentMon 已连接"))
-                current.fps = available(0, "PresentMon · 当前没有新呈现帧");
             if (collecting && was_foreground && !was_paused && !target_changed)
                 current.session_seconds += std::min(2.0, (current.timestamp_ms - last_session) / 1000.0);
             current.frame_status = presentmon.status();
+            if (collecting && current.fps.state == State::waiting) current.fps.reason = current.frame_status;
             if (active && !collecting) current.frame_status += " · 游戏已失焦，统计暂停";
         } else {
             current.frame_status = "采集已暂停 · 保留最后读数";

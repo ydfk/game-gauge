@@ -1,4 +1,5 @@
 #include "presentmon.h"
+#include "frame_stream_health.h"
 #include "common/platform.h"
 #include "common/sample_validation.h"
 #include "PresentMonAPI.h"
@@ -40,6 +41,7 @@ struct PresentMonProvider::Impl {
     uint64_t started{}, retry_at{}, raw_frames{}, accepted_frames{};
     uint64_t active_since{};
     bool collecting{};
+    FrameStreamHealth health;
     std::string message{"PresentMon 服务尚未连接"};
     PM_QUERY_ELEMENT frame_elements[3]{{PM_METRIC_SWAP_CHAIN_ADDRESS, PM_STAT_NONE},
         {PM_METRIC_PRESENT_START_QPC, PM_STAT_NONE}, {PM_METRIC_BETWEEN_PRESENTS, PM_STAT_NONE}};
@@ -49,6 +51,7 @@ struct PresentMonProvider::Impl {
     decltype(&pmOpenSession) open{};
     decltype(&pmOpenSessionWithPipe) open_with_pipe{};
     decltype(&pmCloseSession) close{};
+    decltype(&pmSetEtwFlushPeriod) set_flush{};
     decltype(&pmStartTrackingProcess) start{};
     decltype(&pmStopTrackingProcess) stop{};
     decltype(&pmRegisterFrameQuery) register_frames{};
@@ -90,6 +93,7 @@ struct PresentMonProvider::Impl {
             if (!library) { message = "缺少 PresentMon SDK：请运行依赖安装脚本"; return false; }
             const bool loaded = bind(open, "pmOpenSession") && bind(open_with_pipe, "pmOpenSessionWithPipe") &&
                 bind(close, "pmCloseSession") && bind(start, "pmStartTrackingProcess") &&
+                bind(set_flush, "pmSetEtwFlushPeriod") &&
                 bind(stop, "pmStopTrackingProcess") && bind(register_frames, "pmRegisterFrameQuery") && bind(consume, "pmConsumeFrames") &&
                 bind(free_frames, "pmFreeFrameQuery") && bind(introspect, "pmGetIntrospectionRoot") && bind(free_root, "pmFreeIntrospectionRoot") &&
                 bind(register_dynamic, "pmRegisterDynamicQuery") && bind(poll_dynamic, "pmPollDynamicQuery") && bind(free_dynamic, "pmFreeDynamicQuery");
@@ -99,6 +103,8 @@ struct PresentMonProvider::Impl {
         const auto pipe_length = GetEnvironmentVariableA("GAMEGAUGE_PRESENTMON_PIPE", named_pipe, sizeof(named_pipe));
         auto result = pipe_length && pipe_length < sizeof(named_pipe) ? open_with_pipe(&session, named_pipe) : open(&session);
         if (result != PM_STATUS_SUCCESS) { session = nullptr; message = "PresentMon 服务不可用，状态 " + std::to_string(result); return false; }
+        result = set_flush(session, 100);
+        if (result != PM_STATUS_SUCCESS) { message = "帧事件刷新设置失败，状态 " + std::to_string(result); disconnect(); return false; }
         const PM_INTROSPECTION_ROOT* root{};
         if (introspect(session, &root) == PM_STATUS_SUCCESS && root && root->pDevices && root->pMetrics) {
             std::unordered_map<uint32_t, std::string> device_ids;
@@ -168,11 +174,12 @@ std::vector<PresentMonCapability> PresentMonProvider::capabilities() {
     impl_->connect();
     return impl_->capability_list;
 }
-void PresentMonProvider::reset() { impl_->disconnect(); impl_->retry_at = 0; }
+void PresentMonProvider::reset() { impl_->disconnect(); impl_->retry_at = 0; impl_->health.reset(); }
 void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameStatistics& statistics, bool collect_frames) {
     if (!target.pid) {
         if (impl_->pid) { impl_->disconnect(); statistics.reset(); }
         impl_->message = "等待游戏目标 · 帧采集按需连接";
+        impl_->health.reset();
         return;
     }
     if (!impl_->connect()) return;
@@ -221,6 +228,16 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
     }
     impl_->raw_frames += count;
     impl_->poll_telemetry(snapshot);
+    // 长时间无帧时重建订阅，指数退避避免暂停画面触发频繁重连。
+    if (impl_->health.reconnect_due(now, collect_frames, count > 0)) {
+        impl_->disconnect(); impl_->retry_at = now + 1000;
+        impl_->message = "帧采集未返回数据 · 正在重新连接";
+        return;
+    }
+    if (impl_->health.retries()) {
+        impl_->message = "帧采集无数据 · 已自动重连 " + std::to_string(impl_->health.retries()) + " 次";
+        return;
+    }
     impl_->message = std::format("PresentMon 已连接 · 原始帧 {} · 有效帧 {}", impl_->raw_frames, impl_->accepted_frames);
 }
 }

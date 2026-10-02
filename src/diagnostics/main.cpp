@@ -45,14 +45,25 @@ int wmain(int argc, wchar_t** argv) {
             gauge::Target target; target.pid = presentmon_pid;
             gauge::Snapshot snapshot; snapshot.hardware = gauge::discover_hardware();
             gauge::FrameStatistics statistics; gauge::PresentMonProvider provider;
-            const auto until = GetTickCount64() + duration;
+            const auto began = GetTickCount64(), until = began + duration;
+            uint32_t polls{}, valid_polls{}; uint64_t first_frame_ms{};
+            double minimum_fps = 100000, maximum_fps{};
             do {
                 provider.poll(target, snapshot, statistics);
                 statistics.publish(snapshot, GetTickCount64());
+                ++polls;
+                if (snapshot.fps.state == gauge::State::valid && snapshot.fps.value) {
+                    if (!valid_polls) first_frame_ms = GetTickCount64() - began;
+                    ++valid_polls;
+                    minimum_fps = std::min(minimum_fps, *snapshot.fps.value);
+                    maximum_fps = std::max(maximum_fps, *snapshot.fps.value);
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(250));
             } while (GetTickCount64() < until);
             std::cout << gauge::Json{{"frame_status", provider.status()}, {"raw_frames", provider.raw_frame_count()},
                 {"accepted_frames", provider.accepted_frame_count()}, {"fps", gauge::snapshot_json(snapshot)["fps"]},
+                {"polls", polls}, {"valid_polls", valid_polls}, {"first_frame_ms", valid_polls ? gauge::Json(first_frame_ms) : gauge::Json(nullptr)},
+                {"minimum_fps", valid_polls ? gauge::Json(minimum_fps) : gauge::Json(nullptr)}, {"maximum_fps", valid_polls ? gauge::Json(maximum_fps) : gauge::Json(nullptr)},
                 {"frame_samples", snapshot.frame_samples}, {"cpu_temperature", gauge::snapshot_json(snapshot)["cpu_temperature"]}}.dump(2) << '\n';
             return provider.accepted_frame_count() ? 0 : 2;
         }
