@@ -16,18 +16,11 @@ std::wstring number(const Metric& metric, const wchar_t* unit = L"", int digits 
 }
 D2D1_COLOR_F hud_color(MetricTone tone) {
     switch (tone) {
-    case MetricTone::watch: return D2D1::ColorF(0xFFE09A);
-    case MetricTone::high: return D2D1::ColorF(0xFFC078);
-    case MetricTone::critical: return D2D1::ColorF(0xFF8790);
-    case MetricTone::muted: return D2D1::ColorF(0xB6BEC9);
-    default: return D2D1::ColorF(0xF6F8FC);
+    case MetricTone::high: return D2D1::ColorF(0xE3BC83);
+    case MetricTone::critical: return D2D1::ColorF(0xE9A293);
+    case MetricTone::muted: return D2D1::ColorF(0xA4AAA9);
+    default: return D2D1::ColorF(0xECEBE6);
     }
-}
-D2D1_COLOR_F group_color(const std::wstring& group) {
-    if (group == L"CPU") return D2D1::ColorF(0x9FDCCB);
-    if (group == L"GPU") return D2D1::ColorF(0xA9CEFF);
-    if (group == L"内存") return D2D1::ColorF(0xD5C4F3);
-    return D2D1::ColorF(0xC8D0DC);
 }
 }
 std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
@@ -81,76 +74,12 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         items.push_back(std::move(item));
     }
     if (config.show_obs) {
-        const auto value = s.obs_state == "paused" ? L"Ⅱ 录制已暂停 · 记得恢复" : obs_label(s.obs_state);
-        // 状态放在最前面，窄游戏窗口裁切时仍优先可见。
-        items.insert(items.begin(), {L"OBS", value, hud_color(obs_tone(s.obs_state)), L"OBS", s.obs_state});
+        auto value = obs_label(s.obs_state);
+        if (s.obs_state == "paused") value = L"已暂停 · 记得恢复";
+        else if (value.size() > 2) value.erase(0, 2);
+        items.push_back({L"OBS", value, hud_color(obs_tone(s.obs_state)), L"OBS", s.obs_state});
     }
     return items;
-}
-namespace {
-Microsoft::WRL::ComPtr<IDWriteTextFormat> hud_format(IDWriteFactory* write, const Config& config, DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_SEMI_BOLD) {
-    Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
-    check(write->CreateTextFormat(L"Segoe UI", nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, static_cast<float>(config.font_size), L"zh-CN", &format));
-    format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP); return format;
-}
-float item_width(IDWriteFactory* write, IDWriteTextFormat* format, const std::wstring& text) {
-    Microsoft::WRL::ComPtr<IDWriteTextLayout> layout;
-    check(write->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.size()), format, 8192, 128, &layout));
-    DWRITE_TEXT_METRICS metrics{}; check(layout->GetMetrics(&metrics)); return metrics.widthIncludingTrailingWhitespace;
-}
-}
-D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config) {
-    const auto format = hud_format(write, config); float width = 10; std::wstring previous;
-    const auto labels = hud_format(write, config, DWRITE_FONT_WEIGHT_MEDIUM);
-    for (const auto& item : items) {
-        if (!previous.empty()) width += previous != item.group ? 20.f : 8.f;
-        if (!item.label.empty()) width += item_width(write, labels.Get(), item.label) + 6;
-        width += item_width(write, format.Get(), item.value); previous = item.group;
-        if (!item.status.empty()) width += 16;
-    }
-    return D2D1::SizeF(width, static_cast<float>(config.font_size * 1.35 + 2 + (config.graph ? 40 : 0)));
-}
-void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config, float width, float height) {
-    const auto format = hud_format(write, config);
-    const auto labels = hud_format(write, config, DWRITE_FONT_WEIGHT_MEDIUM);
-    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    check(target->CreateSolidColorBrush(D2D1::ColorF(0x20252D, static_cast<float>(config.opacity)), &brush));
-    const auto surface = D2D1::RoundedRect(D2D1::RectF(.5f, .5f, width - .5f, height - .5f), 4, 4);
-    target->FillRoundedRectangle(surface, brush.Get());
-    brush->SetColor(D2D1::ColorF(0xA7B3C5, static_cast<float>(config.opacity) * .38f));
-    target->DrawRoundedRectangle(surface, brush.Get(), 1);
-    float x = 5; std::wstring previous;
-    const float bottom = static_cast<float>(config.font_size * 1.35 + 2);
-    for (const auto& item : items) {
-        if (!previous.empty()) {
-            if (previous != item.group) {
-                brush->SetColor(D2D1::ColorF(0x8490A2, .48f));
-                target->DrawLine(D2D1::Point2F(x + 10, 4), D2D1::Point2F(x + 10, bottom - 4), brush.Get(), 1);
-                x += 20;
-            } else x += 8;
-        }
-        const bool badge = !item.status.empty();
-        if (badge) {
-            const float badge_width = item_width(write, labels.Get(), item.label) + 6 + item_width(write, format.Get(), item.value) + 16;
-            // 仅底色缓慢变化，暂停文字始终保持高对比度，不闪烁或消失。
-            const float pulse = .5f + .5f * std::sin(static_cast<float>(GetTickCount64() % 3000) * 6.2831853f / 3000.f);
-            const auto color = item.status == "paused" ? D2D1::ColorF(1.f, .75f + .08f * pulse, .30f) :
-                item.status == "recording" ? D2D1::ColorF(0x44272F) : D2D1::ColorF(0x343B46);
-            brush->SetColor(color);
-            target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, 0, x + badge_width, bottom), 3, 3), brush.Get());
-            x += 8;
-        }
-        if (!item.label.empty()) {
-            brush->SetColor(badge ? D2D1::ColorF(item.status == "paused" ? 0x272018 : 0xF3E9E9) : group_color(item.group));
-            const auto w = item_width(write, labels.Get(), item.label);
-            target->DrawTextW(item.label.c_str(), static_cast<UINT32>(item.label.size()), labels.Get(), D2D1::RectF(x, 0, x + w + 2, bottom), brush.Get()); x += w + 6;
-        }
-        brush->SetColor(badge ? D2D1::ColorF(item.status == "paused" ? 0x272018 :
-            item.status == "recording" ? 0xFFADB5 : 0xFFE0A6) : item.color); const auto w = item_width(write, format.Get(), item.value);
-        target->DrawTextW(item.value.c_str(), static_cast<UINT32>(item.value.size()), format.Get(), D2D1::RectF(x, 0, x + w + 2, bottom), brush.Get());
-        x += w + (badge ? 8 : 0); previous = item.group;
-    }
 }
 Renderer::Renderer(HWND window) {
     check(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,

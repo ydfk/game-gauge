@@ -10,7 +10,7 @@ int wmain(int argc, wchar_t** argv) {
     try {
         ComPtr<IWICImagingFactory> wic;
         check(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic)));
-        ComPtr<IWICBitmap> bitmap; check(wic->CreateBitmap(1500, 330, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &bitmap));
+        ComPtr<IWICBitmap> bitmap; check(wic->CreateBitmap(1024, 400, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &bitmap));
         ComPtr<ID2D1Factory> d2d; check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, d2d.GetAddressOf()));
         ComPtr<ID2D1RenderTarget> target;
         check(d2d->CreateWicBitmapRenderTarget(bitmap.Get(), D2D1::RenderTargetProperties(), &target));
@@ -30,21 +30,26 @@ int wmain(int argc, wchar_t** argv) {
         for (const char* state : {"recording", "paused", "idle", "disconnected", "disabled"}) {
             target->SetTransform(D2D1::Matrix3x2F::Identity());
             backdrop->SetColor(D2D1::ColorF(backgrounds[row++]));
-            target->FillRectangle(D2D1::RectF(0, y - 15, 1500, y + 40), backdrop.Get());
+            target->FillRectangle(D2D1::RectF(0, y - 15, 1024, y + 40), backdrop.Get());
             s.obs_state = state; const auto items = gauge::hud_items(s, config);
-            if (items.empty() || items.front().status != state) throw std::runtime_error("OBS must be first and carry state");
+            if (items.empty() || items.back().status != state) throw std::runtime_error("OBS must be last and carry state");
             const auto size = gauge::measure_hud_items(write.Get(), items, config);
-            if (size.width > 1450) throw std::runtime_error("HUD preview clipped");
+            if (size.width > 984) throw std::runtime_error("HUD preview clipped");
             target->SetTransform(D2D1::Matrix3x2F::Translation(20, y));
             gauge::draw_hud_items(target.Get(), write.Get(), items, config, size.width, size.height);
             y += 60;
         }
+        s.obs_state = "paused";
+        const auto narrow_items = gauge::hud_items(s, config);
+        target->SetTransform(D2D1::Matrix3x2F::Translation(20, y));
+        const auto narrow_size = gauge::measure_hud_items(write.Get(), narrow_items, config);
+        gauge::draw_hud_items(target.Get(), write.Get(), narrow_items, config, 420, narrow_size.height);
         check(target->EndDraw());
         ComPtr<IWICStream> stream; check(wic->CreateStream(&stream)); check(stream->InitializeFromFilename(argv[1], GENERIC_WRITE));
         ComPtr<IWICBitmapEncoder> encoder; check(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder));
         check(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache));
         ComPtr<IWICBitmapFrameEncode> frame; check(encoder->CreateNewFrame(&frame, nullptr)); check(frame->Initialize(nullptr));
-        check(frame->SetSize(1500, 330)); WICPixelFormatGUID pixel = GUID_WICPixelFormat32bppBGRA; check(frame->SetPixelFormat(&pixel));
+        check(frame->SetSize(1024, 400)); WICPixelFormatGUID pixel = GUID_WICPixelFormat32bppBGRA; check(frame->SetPixelFormat(&pixel));
         check(frame->WriteSource(bitmap.Get(), nullptr)); check(frame->Commit()); check(encoder->Commit());
         std::cout << "OBS states rendered without clipping\n";
     } catch (const std::exception& e) { std::cerr << e.what(); return 1; }
