@@ -14,14 +14,7 @@ std::wstring number(const Metric& metric, const wchar_t* unit = L"", int digits 
     if (!metric.value || metric.state != State::valid) return L"—";
     return std::format(L"{:.{}f}{}", *metric.value, digits, unit);
 }
-D2D1_COLOR_F hud_color(MetricTone tone) {
-    switch (tone) {
-    case MetricTone::high: return D2D1::ColorF(0xFFD166);
-    case MetricTone::critical: return D2D1::ColorF(0xFF8585);
-    case MetricTone::muted: return D2D1::ColorF(0x9099A5);
-    default: return D2D1::ColorF(0xF3F5F7);
-    }
-}
+D2D1_COLOR_F hud_color(MetricTone tone) { return D2D1::ColorF(tone_rgb(tone)); }
 }
 std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
     auto gpu = std::find_if(s.hardware.gpus.begin(), s.hardware.gpus.end(), [&](const Gpu& item) { return item.id == s.selected_gpu; });
@@ -62,9 +55,6 @@ std::vector<HudItem> hud_items(const Snapshot& s, const Config& config) {
         else if (id == "session") { item.label = L"游玩"; const auto t = static_cast<int>(s.session_seconds); item.value = std::format(L"{:02}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60); }
         else continue;
         item.color = hud_color(metric_tone(id, s));
-        // 高 GPU 占用是正常游戏负载，常规读数保持中性，仅异常温度等使用警示色。
-        if ((id == "gpu_load" || id == "cpu_load" || id == "process_cpu") && item.value != L"—")
-            item.color = hud_color(MetricTone::neutral);
         item.group = id.starts_with("cpu_") || id == "process_cpu" ? L"CPU" :
             id.starts_with("gpu_") || id == "vram" ? L"GPU" :
             id.starts_with("memory_") || id == "process_memory" ? L"内存" : id == "disk_temperature" ? L"硬盘" : id == "session" ? L"时间" : L"帧率";

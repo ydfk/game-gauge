@@ -227,3 +227,8 @@
 - 设置预览和实际 HUD 共用绘制；曲线调整为适合黑底的浅蓝色。保留用户透明度、字号和位置。
 - Release 打包及 core_contracts / ipc_contracts 通过；检查五种 OBS 状态、窄窗口及安装版 144 DPI 设置预览，无裁切。样图：build/validation/hud-black-016.png、settings-hud-black-016.png。
 - 已安装 0.1.16；运行版本、卸载注册一致，安装主程序 SHA256 与构建产物一致，hud_error 为空。尚未进行真实游戏内视觉验收。
+## 2026-10-03 — 0.1.17 数值状态配色
+
+- 修正对用户要求的理解：黑色半透明底和分隔线保持，数值按状态使用完整的绿、蓝、黄、橙、红、灰色，取消 HUD 将正常/关注状态及 CPU/GPU 占用强制设为白色的覆盖。
+- 复用 common/metric_style 的现有阈值和颜色，使设置与 HUD 状态语义一致。OBS 保持末尾和黄色暂停提醒。
+- Release 打包与 core_contracts / ipc_contracts 通过；hud-states-017.png 覆盖 FPS 144/90/45/25/10、CPU 温度 65/78/88/97/缺失及 OBS 五种状态，已检查渲染和窄窗口。

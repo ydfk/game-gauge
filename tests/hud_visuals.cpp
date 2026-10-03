@@ -31,6 +31,12 @@ int wmain(int argc, wchar_t** argv) {
             target->SetTransform(D2D1::Matrix3x2F::Identity());
             backdrop->SetColor(D2D1::ColorF(backgrounds[row++]));
             target->FillRectangle(D2D1::RectF(0, y - 15, 1024, y + 40), backdrop.Get());
+            // 从流畅、正常到警告、危险和缺失，检查数值状态色。
+            const double fps[]{144, 90, 45, 25, 10};
+            const double cpu[]{65, 78, 88, 97, 0};
+            s.fps = gauge::available(fps[row - 1], "preview");
+            s.cpu_temperature = row == 5 ? gauge::missing(gauge::State::waiting, "preview") :
+                gauge::available(cpu[row - 1], "preview");
             s.obs_state = state; const auto items = gauge::hud_items(s, config);
             if (items.empty() || items.back().status != state) throw std::runtime_error("OBS must be last and carry state");
             const auto size = gauge::measure_hud_items(write.Get(), items, config);
