@@ -23,6 +23,7 @@ uint32_t tone_rgb(MetricTone tone) {
     switch (tone) {
     case MetricTone::muted: return 0x9AACC0;
     case MetricTone::good: return 0x50FF00;
+    case MetricTone::excellent: return 0x00C853;
     case MetricTone::cool: return 0x30C8FF;
     case MetricTone::watch: return 0xFFE000;
     case MetricTone::high: return 0xFFA000;
@@ -34,16 +35,16 @@ MetricTone metric_tone(std::string_view id, std::optional<double> value) {
     if (!value || !std::isfinite(*value)) return MetricTone::muted;
     const double v = *value;
     if (id == "fps" || id == "low1" || id == "low01")
-        return v < 15 ? MetricTone::critical : v < 30 ? MetricTone::high : v < 60 ? MetricTone::watch : v >= 144 ? MetricTone::cool : MetricTone::good;
-    if (id == "frametime") return rising(v, 16.8, 33.4, 66.7);
-    if (id == "cpu_temperature") return rising(v, 75, 85, 95);
-    if (id == "gpu_temperature") return rising(v, 70, 80, 90);
-    if (id == "disk_temperature") return rising(v, 50, 60, 70);
-    if (id == "memory_load" || id == "memory_used" || id == "vram") return rising(v, 80, 90, 95);
-    // GPU 满负载常见于正常游戏，以橙色提示接近满载，不把它当成故障。
-    if (id == "gpu_load") return v >= 100 ? MetricTone::high : v >= 95 ? MetricTone::watch : v >= 80 ? MetricTone::cool : MetricTone::good;
+        return v < 15 ? MetricTone::critical : v < 30 ? MetricTone::high : v < 60 ? MetricTone::watch : v > 144 ? MetricTone::excellent : MetricTone::good;
+    if (id == "frametime") return rising(v, 16.8, 25, 33.4);
+    if (id == "cpu_temperature") return rising(v, 70, 80, 90);
+    if (id == "gpu_temperature") return rising(v, 65, 75, 85);
+    if (id == "disk_temperature") return rising(v, 45, 55, 65);
+    if (id == "memory_load" || id == "memory_used" || id == "vram") return rising(v, 70, 80, 90);
+    // 占用率颜色表示负载等级，红色提醒接近满载。
+    if (id == "gpu_load") return rising(v, 80, 90, 95);
     if (id == "cpu_load" || id == "process_cpu")
-        return v >= 100 ? MetricTone::critical : v >= 95 ? MetricTone::high : v >= 80 ? MetricTone::watch : v >= 60 ? MetricTone::cool : MetricTone::good;
+        return rising(v, 70, 80, 90);
     if (id.ends_with("clock") || id == "gpu_power" || id == "gpu_fan") return MetricTone::cool;
     return MetricTone::neutral;
 }

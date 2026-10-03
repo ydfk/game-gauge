@@ -55,7 +55,7 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
     if (width <= 0) return;
     const bool paused = group.status == "paused";
     const float height = layout.row_height;
-    const auto status_color = D2D1::ColorF(paused ? 0xFFE000 :
+    const auto status_color = D2D1::ColorF(paused ? 0xFF4040 :
         group.status == "recording" ? 0x50FF00 : 0xADB5BF);
     // 连续黑色底板通过细分隔线分组，让读数保持清晰。
     if (left > 0) {
