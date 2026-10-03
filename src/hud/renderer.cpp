@@ -16,10 +16,10 @@ std::wstring number(const Metric& metric, const wchar_t* unit = L"", int digits 
 }
 D2D1_COLOR_F hud_color(MetricTone tone) {
     switch (tone) {
-    case MetricTone::high: return D2D1::ColorF(0x6E3205);
-    case MetricTone::critical: return D2D1::ColorF(0x82192B);
-    case MetricTone::muted: return D2D1::ColorF(0x3D464C);
-    default: return D2D1::ColorF(0x25313A);
+    case MetricTone::high: return D2D1::ColorF(0xFFD166);
+    case MetricTone::critical: return D2D1::ColorF(0xFF8585);
+    case MetricTone::muted: return D2D1::ColorF(0x9099A5);
+    default: return D2D1::ColorF(0xF3F5F7);
     }
 }
 }
@@ -144,7 +144,7 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     check(context_->CreateSolidColorBrush(D2D1::ColorF(1.f, 1.f, 1.f), &brush));
     draw_hud_items(context_.Get(), write_.Get(), hud_items(s, config), config, width, height);
     if (config.graph && s.recent_frames.size() > 1) {
-        brush->SetColor(D2D1::ColorF(0x216B8A));
+        brush->SetColor(D2D1::ColorF(0x81C7EB));
         const float spacing = (width - 12) / static_cast<float>(s.recent_frames.size() - 1);
         auto point = [&](size_t i) { return D2D1::Point2F(6 + spacing * i, height - 5 - static_cast<float>(std::min(s.recent_frames[i], 50.0) / 50 * 32)); };
         for (size_t i = 1; i < s.recent_frames.size(); ++i) context_->DrawLine(point(i - 1), point(i), brush.Get(), 1.2f);
