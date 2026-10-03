@@ -106,7 +106,7 @@ void SettingsWindow::refresh() {
         config_ = config_from_json(status_.at("config"));
         targets_ = ipc_request({{"command", "targets"}}).value("targets", Json::array());
         if (page_ == 3) {
-            const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 2}, {"limit", 2}, {"day", history_day_}});
+            const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 6}, {"limit", 6}, {"day", history_day_}});
             history_ = history.value("history", Json::array());
             history_count_ = history.value("total", size_t{});
             history_dates_ = history.value("dates", Json::array()); history_seconds_ = history.value("active_seconds", 0.0);
@@ -213,10 +213,7 @@ void SettingsWindow::paint() {
     navigation(width, height);
     window_controls(width);
     const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
-    const wchar_t* page_subtitles[]{L"调整监控条的样式和位置。", L"选择常用指标，数值颜色随负载、温度和流畅度变化。",
-        L"监控随游戏打开和关闭。", L"每次游戏自动保存到本机。", L"保持最新，保留你的设置和游戏历史。"};
-    label(page_titles[page_], 272, 35, width - 420, 43, title_.Get(), white);
-    label(page_subtitles[page_], 273, 83, width - 340, 26, body_.Get(), muted);
+    label(page_titles[page_], 272, 54, width - 420, 40, title_.Get(), white);
     line(272, 122, width - 28, 122, edge);
     switch (page_) {
     case 0: appearance_page(width); break;

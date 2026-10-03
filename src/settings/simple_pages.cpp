@@ -50,8 +50,8 @@ void SettingsWindow::page_buttons(float right, float y, size_t& page, size_t pag
 }
 void SettingsWindow::appearance_page(float width) {
     const float left = 272, right = width - 28, span = right - left, half = (span - 14) / 2;
-    fill(D2D1::RectF(left, 148, right, 345), panel, 12);
-    label(L"监控条实时预览", left + 18, 160, span - 36, 24, heading_.Get(), white);
+    fill(D2D1::RectF(left, 148, right, 276), panel, 12);
+    label(L"实时预览", left + 18, 160, span - 36, 24, heading_.Get(), white);
     std::vector<HudItem> items;
     for (const auto& row : status_.value("hud_preview", Json::array())) {
         const auto color = row.at("color");
@@ -64,30 +64,35 @@ void SettingsWindow::appearance_page(float width) {
     float x = left + (span - size.width * fit) / 2;
     if (config_.anchor == 1) x = left + 18;
     if (config_.anchor == 2) x = right - 18 - size.width * fit;
-    const float y = config_.anchor == 3 ? 324.f - size.height * fit : 202.f;
+    const float y = config_.anchor == 3 ? 244.f - size.height * fit : 207.f;
     D2D1_MATRIX_3X2_F saved; target_->GetTransform(&saved);
     target_->SetTransform(D2D1::Matrix3x2F::Scale(fit, fit) * D2D1::Matrix3x2F::Translation(x, y) * saved);
     draw_hud_items(target_.Get(), write_.Get(), items, config_, size.width, size.height);
     target_->SetTransform(saved);
-    label(fit < 1 ? L"按可用宽度缩小显示" : L"与游戏内共用字号、颜色、间距及实时读数", left + 18, 253, span - 36, 22, small_.Get(), muted);
-    toggle(L"游戏内监控", L"识别游戏后自动显示，退出后关闭", config_.enabled,
-        D2D1::RectF(left, 365, left + half, 427), [this](float) { config_.enabled = !config_.enabled; apply(); });
-    toggle(L"录屏隐藏监控", L"从录屏及系统截图中排除监控条", config_.exclude_capture,
-        D2D1::RectF(left + half + 14, 365, right, 427), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
-    slider(L"字号", std::format(L"{:.0f}", config_.font_size), static_cast<float>((config_.font_size - 10) / 22),
-        D2D1::RectF(left, 445, left + half, 517), [this, left, half](float x) {
+    if (fit < 1) label(L"预览已按宽度缩放", right - 180, 160, 162, 24, small_.Get(), muted);
+    const float column = left + half + 14;
+    label(L"样式与位置", left, 302, half, 28, heading_.Get(), white);
+    label(L"显示规则", column, 302, half, 28, heading_.Get(), white);
+    slider(L"文字大小", std::format(L"{:.0f} px", config_.font_size), static_cast<float>((config_.font_size - 10) / 22),
+        D2D1::RectF(left, 344, left + half, 416), [this, left, half](float x) {
             config_.font_size = 10 + 22 * std::clamp((x - left - 18) / (half - 36), 0.f, 1.f); apply(); });
-    slider(L"底色浓度", std::format(L"{:.0f}%", config_.opacity * 100), static_cast<float>(config_.opacity),
-        D2D1::RectF(left + half + 14, 445, right, 517), [this, left, half](float x) {
-            config_.opacity = std::clamp((x - left - half - 32) / (half - 36), 0.f, 1.f); apply(); });
-    label(L"位置", left, 545, 150, 28, heading_.Get(), white);
+    slider(L"背景不透明度", std::format(L"{:.0f}%", config_.opacity * 100), static_cast<float>(config_.opacity),
+        D2D1::RectF(left, 428, left + half, 500), [this, left, half](float x) {
+            config_.opacity = std::clamp((x - left - 18) / (half - 36), 0.f, 1.f); apply(); });
+    label(L"显示位置", left, 525, half, 24, body_.Get(), muted);
     const wchar_t* anchors[]{L"顶部居中", L"左上角", L"右上角", L"底部居中"};
-    const float box = (span - 36) / 4;
-    for (int i = 0; i < 4; ++i) button(anchors[i], D2D1::RectF(left + i * (box + 12), 587, left + i * (box + 12) + box, 629),
-        [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
-    label(L"切换位置会立即更新预览；回到游戏后自动应用。", left, 649, span, 24, small_.Get(), muted);
-    toggle(L"切出游戏后隐藏", L"关闭时跟随游戏窗口显示，最小化或退出后隐藏", config_.hide_on_blur,
-        D2D1::RectF(left, 685, right, 747), [this](float) { config_.hide_on_blur = !config_.hide_on_blur; apply(); });
+    const float box = (half - 10) / 2;
+    for (int i = 0; i < 4; ++i) {
+        const float anchor_x = left + (i % 2) * (box + 10), anchor_y = 563.f + (i / 2) * 52;
+        button(anchors[i], D2D1::RectF(anchor_x, anchor_y, anchor_x + box, anchor_y + 42),
+            [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
+    }
+    toggle(L"游戏内监控", L"游戏启动后显示，退出后关闭", config_.enabled,
+        D2D1::RectF(column, 344, right, 414), [this](float) { config_.enabled = !config_.enabled; apply(); });
+    toggle(L"切出游戏后隐藏", L"关闭后继续跟随游戏窗口", config_.hide_on_blur,
+        D2D1::RectF(column, 426, right, 496), [this](float) { config_.hide_on_blur = !config_.hide_on_blur; apply(); });
+    toggle(L"录屏与截图隐藏", L"捕获画面中不包含监控条", config_.exclude_capture,
+        D2D1::RectF(column, 508, right, 578), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;
@@ -150,7 +155,7 @@ void SettingsWindow::metrics_page(float width) {
         fill(D2D1::RectF(x, 686, x + 6, 692), D2D1::ColorF(tone_rgb(tones[i])), 3);
         label(labels[i], x + 15, 678, 114, 22, small_.Get(), muted);
     }
-    label(L"OBS 录制中为绿，暂停为红，未录制或未连接为橙。", left, 708, span, 23, small_.Get(), muted);
+
 }
 void SettingsWindow::choose_process(bool excluded) {
     wchar_t path[32768]{}; OPENFILENAMEW dialog{sizeof(dialog)};
@@ -161,11 +166,11 @@ void SettingsWindow::choose_process(bool excluded) {
 }
 void SettingsWindow::games_page(float width) {
     const float left = 272, right = width - 28, span = right - left;
-    const auto surface = D2D1::ColorF(0x111D2B);
+    const auto surface = panel;
     const auto name = status_.value("snapshot", Json::object()).value("target", Json::object()).value("name", std::string{});
     label(L"游戏", left, 148, 200, 28, heading_.Get(), white);
     row_action(L"＋ 添加游戏", D2D1::RectF(right - 110, 146, right, 180), [this](float) { choose_process(false); }, true);
-    label(name.empty() ? L"游戏启动后自动识别；也可手动添加。" : L"正在监控  " + wide(name), left, 183, span, 24, small_.Get(), muted);
+    if (!name.empty()) label(L"正在监控  " + wide(name), left, 183, span, 24, small_.Get(), mint);
     const auto pages = std::max(size_t{1}, (targets_.size() + 3) / 4); target_page_ = std::min(target_page_, pages - 1);
     fill(D2D1::RectF(left, 222, right, 472), surface, 10);
     label(L"程序", left + 16, 228, span * .48f, 26, small_.Get(), muted);
@@ -204,7 +209,7 @@ void SettingsWindow::games_page(float width) {
     }
     if (config_.ignored_processes.empty()) {
         label(L"还没有排除规则", left + 16, 580, span - 32, 26, body_.Get(), white);
-        label(L"系统和常见工具已自动过滤，这里只显示你添加的程序。", left + 16, 611, span - 32, 22, small_.Get(), muted);
+
     }
     page_buttons(right, 711, blacklist_page_, blocked_pages);
 }
@@ -212,18 +217,19 @@ void SettingsWindow::updates_page(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto update = status_.value("update", Json::object());
     const auto state = update.value("state", std::string{});
-    list_surface(D2D1::RectF(left, 148, right, 272));
-    label(L"游戏仪表 " + wide(update.value("current", std::string(GAMEGAUGE_VERSION))), left + 14, 162, span - 28, 28, heading_.Get(), white);
-    label(wide(update.value("message", std::string("等待主程序连接"))), left + 14, 203, span - 28, 26, body_.Get(), muted);
-    button(L"检查更新", D2D1::RectF(left, 294, left + 150, 334), [this](float) { command("check_update"); });
-    if (state == "available") button(L"下载更新", D2D1::RectF(left + 164, 294, left + 314, 334), [this](float) { command("download_update"); }, true);
-    if (state == "ready") button(L"安装更新", D2D1::RectF(left + 164, 294, left + 314, 334), [this](float) { command("install_update"); }, true);
-    toggle(L"自动检查更新", L"启动后及每六小时检查一次稳定版", config_.check_updates,
+    fill(D2D1::RectF(left, 148, right, 282), panel, 10);
+    label(L"游戏仪表 " + wide(update.value("current", std::string(GAMEGAUGE_VERSION))), left + 20, 168, span - 40, 28, heading_.Get(), white);
+    label(wide(update.value("message", std::string("等待主程序连接"))), left + 20, 207, span - 350, 26, body_.Get(), muted);
+    button(L"检查更新", D2D1::RectF(right - 310, 215, right - 170, 255), [this](float) { command("check_update"); });
+    if (state == "available") button(L"下载更新", D2D1::RectF(right - 156, 215, right - 20, 255), [this](float) { command("download_update"); }, true);
+    if (state == "ready") button(L"安装更新", D2D1::RectF(right - 156, 215, right - 20, 255), [this](float) { command("install_update"); }, true);
+    label(L"更新偏好", left, 314, span, 28, heading_.Get(), white);
+    toggle(L"自动检查更新", L"每六小时检查稳定版本", config_.check_updates,
         D2D1::RectF(left, 366, right, 438), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
-    toggle(L"自动下载并更新", L"游戏退出后启动安装，Windows 可能要求管理员确认", config_.auto_update,
+    toggle(L"自动下载并更新", L"下载完成后，等待游戏退出再安装", config_.auto_update,
         D2D1::RectF(left, 452, right, 524), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
     const auto repository = update.value("repository", std::string{});
     label(repository.empty() ? L"本地构建尚未配置 GitHub 发布仓库" : L"更新来源：GitHub / " + wide(repository), left, 557, span, 26, small_.Get(), muted);
-    label(L"手动更新也可直接运行新版安装包，配置与历史会保留。", left, 591, span, 26, small_.Get(), muted);
+
 }
 }

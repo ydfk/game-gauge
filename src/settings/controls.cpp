@@ -54,7 +54,7 @@ void SettingsWindow::button(const std::wstring& title, D2D1_RECT_F rect, std::fu
 void SettingsWindow::toggle(const std::wstring& title, const std::wstring& hint, bool value,
     D2D1_RECT_F rect, std::function<void(float)> click) {
     fill(rect, hovered(rect) ? panel_high : panel, 10);
-    outline(rect, hovered(rect) ? edge : tint(edge, .4f), 10);
+    if (hovered(rect)) outline(rect, edge, 10);
     label(title, rect.left + 18, rect.top + 9, rect.right - rect.left - 90, 22, body_.Get(), white);
     label(hint, rect.left + 18, rect.top + 32, rect.right - rect.left - 90, 18, small_.Get(), muted);
     auto track = D2D1::RectF(rect.right - 68, rect.top + 19, rect.right - 24, rect.top + 43);
@@ -66,7 +66,7 @@ void SettingsWindow::toggle(const std::wstring& title, const std::wstring& hint,
 void SettingsWindow::slider(const std::wstring& title, const std::wstring& value, float selected,
     D2D1_RECT_F rect, std::function<void(float)> click) {
     fill(rect, hovered(rect) ? panel_high : panel, 10);
-    outline(rect, hovered(rect) ? edge : tint(edge, .4f), 10);
+    if (hovered(rect)) outline(rect, edge, 10);
     label(title, rect.left + 18, rect.top + 12, 180, 22, body_.Get(), white);
     label(value, rect.right - 110, rect.top + 12, 92, 22, body_.Get(), mint);
     const float left = rect.left + 18, right = rect.right - 18, y = rect.bottom - 21;
@@ -82,7 +82,7 @@ void SettingsWindow::slider(const std::wstring& title, const std::wstring& value
     add(rect, std::move(click), std::move(adjust));
 }
 void SettingsWindow::navigation(float width, float height) {
-    fill(D2D1::RectF(0, 0, 236, height), D2D1::ColorF(0x101A27));
+    fill(D2D1::RectF(0, 0, 236, height), D2D1::ColorF(0x12171E));
     fill(D2D1::RectF(27, 34, 65, 72), mint, 10);
     line(33, 58, 39, 53, background, 2.5f);
     line(39, 53, 45, 58, background, 2.5f);
@@ -124,7 +124,7 @@ void SettingsWindow::navigation(float width, float height) {
     button(quitting_ ? L"正在退出…" : L"退出程序", D2D1::RectF(28, height - 151, 208, height - 113),
         [this](float) { quit_program(); }, false, true);
     line(28, height - 104, 208, height - 104, edge);
-    label(L"本机采集 · 自动保存", 28, height - 81, 190, 20, small_.Get(), muted);
+
     label(L"版本 " + wide(GAMEGAUGE_VERSION), 28, height - 55, 180, 20, small_.Get(), muted);
     fill(D2D1::RectF(236, 0, width, height), background);
 }

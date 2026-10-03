@@ -77,40 +77,41 @@ void SettingsWindow::history_page(float width) {
         button(wide(day), D2D1::RectF(x, 191, x + date_width, 226), [this, day](float) { history_day_ = day; history_page_index_ = 0; refresh(); }, history_day_ == day);
     }
     page_buttons(right, 194, history_date_page_, date_pages);
-    float y = 248;
+    const float table_bottom = 290 + std::max(1.f, static_cast<float>(history_.size())) * 70 + 8;
+    fill(D2D1::RectF(left, 244, right, history_.empty() ? 440 : table_bottom), panel, 10);
+    label(L"游戏", left + 16, 250, span * .35f, 28, small_.Get(), muted);
+    label(L"开始时间 / 时长", left + span * .38f, 250, span * .24f, 28, small_.Get(), muted);
+    label(L"平均 FPS", left + span * .63f, 250, 92, 28, small_.Get(), muted);
+    label(L"操作", right - 164, 250, 148, 28, small_.Get(), muted);
+    line(left + 16, 285, right - 16, 285, edge);
+    float y = 290;
     for (const auto& row : history_) {
-        fill(D2D1::RectF(left, y, right, y + 190), panel, 10);
-        game_identity(row, left + 16, y + 7, span - 220);
-        row_action(L"详情", D2D1::RectF(right - 178, y + 7, right - 123, y + 38), [this, id = row.at("id").get<std::string>()](float) {
+        game_identity(row, left + 16, y + 10, span * .35f - 16);
+        label(time_text(row.value("started_ms", 0ull)), left + span * .38f, y + 6, span * .24f, 26, small_.Get(), white);
+        label(duration(row.value("active_seconds", 0.0)) + L" · " + status_text(row),
+            left + span * .38f, y + 32, span * .24f, 22, small_.Get(), muted);
+        const auto fps = stat_for(row, "fps").value("average", Json{});
+        label(reading(fps), left + span * .63f, y + 15, 80, 28, mono_.Get(), stat_color("fps", fps));
+        row_action(L"详情", D2D1::RectF(right - 170, y + 13, right - 120, y + 47), [this, id = row.at("id").get<std::string>()](float) {
             history_selected_ = id; history_tab_ = 0; history_metric_ = 0; refresh();
         }, true);
-        row_action(L"导出", D2D1::RectF(right - 115, y + 7, right - 63, y + 38), [this, row](float) { export_history(row); });
-        row_action(L"删除", D2D1::RectF(right - 57, y + 7, right - 10, y + 38), [this, id = row.at("id").get<std::string>()](float) {
+        row_action(L"导出", D2D1::RectF(right - 115, y + 13, right - 65, y + 47), [this, row](float) { export_history(row); });
+        row_action(L"删除", D2D1::RectF(right - 60, y + 13, right - 10, y + 47), [this, id = row.at("id").get<std::string>()](float) {
             try { ipc_request({{"command", "delete_history"}, {"id", id}}); history_page_index_ = 0; refresh(); }
             catch (const std::exception& e) { error_ = e.what(); }
         });
-        label(time_text(row.value("started_ms", 0ull)) + L"  ·  " + duration(row.value("active_seconds", 0.0)) + L"  ·  " + status_text(row),
-            left + 16, y + 48, span - 32, 24, small_.Get(), muted);
-        const float box = (span - 32) / 6;
-        for (int i = 0; i < 6; ++i) {
-            const auto& column = columns[i]; const auto stat = stat_for(row, column.id); const float x = left + 16 + i * box;
-            if (i) line(x - 8, y + 82, x - 8, y + 174, D2D1::ColorF(0x2A3B4D));
-            label(std::wstring(column.title) + L" · 平均", x, y + 75, box - 12, 24, small_.Get(), muted);
-            label(reading(stat.value("average", Json{}), column.unit), x, y + 101, box - 12, 29, data_.Get(), stat_color(column.id, stat.value("average", Json{})));
-            label(L"最高 " + reading(stat.value("maximum", Json{})), x, y + 136, box - 12, 20, small_.Get(), muted);
-            label(L"最低 " + reading(stat.value("minimum", Json{})), x, y + 159, box - 12, 20, small_.Get(), muted);
-        }
-        y += 206;
+        y += 70;
+        if (y + 8 < table_bottom) line(left + 16, y, right - 16, y, tint(edge, .65f));
     }
     if (history_.empty()) {
         label(L"还没有游戏记录", left, 335, span, 36, heading_.Get(), white);
-        label(L"开始游戏后自动保存性能数据，结束后可查看报告和曲线。", left, 379, span, 28, body_.Get(), muted);
+        label(L"游戏结束后，记录会显示在这里。", left, 379, span, 28, body_.Get(), muted);
     }
-    const auto pages = std::max(size_t{1}, (history_count_ + 1) / 2);
+    const auto pages = std::max(size_t{1}, (history_count_ + 5) / 6);
     if (history_page_index_ >= pages) { history_page_index_ = pages - 1; refresh(); }
-    page_buttons(right, 672, history_page_index_, pages, true);
+    page_buttons(right, 728, history_page_index_, pages, true);
     const auto error = status_.value("snapshot", Json::object()).value("history_error", std::string{});
-    if (!error.empty()) label(L"历史保存失败：" + wide(error), left, 714, span, 25, small_.Get(), amber);
+    if (!error.empty()) label(L"历史保存失败：" + wide(error), left, 765, span, 25, small_.Get(), amber);
 }
 void SettingsWindow::history_chart(const Json& row, const std::string& metric, D2D1_RECT_F rect, D2D1_COLOR_F color) {
     const auto stat = stat_for(row, metric);

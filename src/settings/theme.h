@@ -3,10 +3,10 @@
 #include <d2d1.h>
 
 namespace gauge::theme {
-inline const auto background = D2D1::ColorF(0x0D1520);
-inline const auto panel = D2D1::ColorF(0x172332);
-inline const auto panel_high = D2D1::ColorF(0x223449);
-inline const auto edge = D2D1::ColorF(0x30445B);
+inline const auto background = D2D1::ColorF(0x15191F);
+inline const auto panel = D2D1::ColorF(0x1E242C);
+inline const auto panel_high = D2D1::ColorF(0x28313C);
+inline const auto edge = D2D1::ColorF(0x35404C);
 inline const auto white = D2D1::ColorF(0xEDF3FA);
 inline const auto muted = D2D1::ColorF(0x9AACC0);
 inline const auto mint = D2D1::ColorF(0x75DFB0);
