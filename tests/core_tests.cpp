@@ -1,3 +1,4 @@
+#include "common/oled_shift.h"
 #include "common/config.h"
 #include "common/frame_statistics.h"
 #include "common/history.h"
@@ -20,6 +21,21 @@ int main() {
     try {
         telemetry_regressions();
         metric_style_contracts();
+        require(!gauge::config_from_json(gauge::Json::object()).oled_protection, "legacy configs leave OLED shift off");
+        require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"oled_protection", true}}))).oled_protection,
+            "OLED preference must survive serialization");
+        for (int origin : {0, 2, 50, 98, 100}) {
+            int previous = origin; bool moved = false;
+            for (uint64_t step = 0; step < 120; ++step) {
+                const int position = gauge::oled_shift_axis(origin, 0, 100, step);
+                require(position >= 0 && position <= 100 && std::abs(position - origin) <= 4, "OLED shift must stay inside window and radius");
+                require(std::abs(position - previous) <= 1, "OLED shift must move one pixel without wrap jumps");
+                moved |= position != origin; previous = position;
+            }
+            require(moved, "OLED shift must still move at screen edges");
+        }
+        require(gauge::oled_shift_axis(0, 0, 0, 99) == 0, "full width HUD must not overflow");
+        require(gauge::oled_shift_axis(-10, -100, 0, 0) == -10, "OLED supports negative monitor coordinates");
         require(gauge::game_display_name("C:\\Games\\CONTROLResonant.exe", "CONTROLResonant.exe") == "控制：共振", "known game has Chinese title without executable");
         require(gauge::game_display_name("", "unknown.exe") == "unknown", "missing metadata keeps readable filename");
         gauge::Target known; known.pid = 123; known.path = "C:\\Games\\Example.exe"; known.name = "Example.exe";

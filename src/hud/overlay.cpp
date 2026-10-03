@@ -1,5 +1,6 @@
 #include "overlay.h"
 #include "common/platform.h"
+#include "common/oled_shift.h"
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <sstream>
@@ -40,6 +41,8 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         capture_requested_ = SetWindowDisplayAffinity(window_, config.exclude_capture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE) != FALSE;
         capture_error_ = capture_requested_ ? 0 : GetLastError();
     }
+    if (!config.oled_protection) oled_started_ = 0;
+    else if (!oled_started_) oled_started_ = GetTickCount64();
     const auto target = reinterpret_cast<HWND>(snapshot.target.window);
     DWORD target_pid{};
     if (target) GetWindowThreadProcessId(target, &target_pid);
@@ -78,6 +81,11 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         int y = config.anchor == 3 ? bounds.bottom - size.cy - y_margin : bounds.top + y_margin;
         x = std::clamp<LONG>(x, bounds.left, std::max(bounds.left, bounds.right - size.cx));
         y = std::clamp<LONG>(y, bounds.top, std::max(bounds.top, bounds.bottom - size.cy));
+        if (config.oled_protection && !editing_) {
+            const auto step = (GetTickCount64() - oled_started_) / 60000;
+            x = oled_shift_axis(x, bounds.left, bounds.right - size.cx, step);
+            y = oled_shift_axis(y, bounds.top, bounds.bottom - size.cy, step / 2);
+        }
         HWND above = HWND_TOPMOST;
         if (!snapshot.target.foreground && !editing_) {
             // 后台监控紧随游戏的 Z 序，被其他应用覆盖时也一起被覆盖。

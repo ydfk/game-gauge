@@ -27,6 +27,7 @@ private:
     std::optional<bool> edit_result_;
     DWORD capture_error_{};
     std::string error_, last_draw_;
+    uint64_t oled_started_{};
     RECT bounds_{};
 };
 }

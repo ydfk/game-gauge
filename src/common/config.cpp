@@ -25,6 +25,7 @@ Config config_from_json(const Json& json) {
     config.enabled = json.value("enabled", true);
     config.paused = json.value("paused", false);
     config.exclude_capture = json.value("exclude_capture", true);
+    config.oled_protection = json.value("oled_protection", false);
     config.graph = json.value("graph", false);
     config.preview = json.value("preview", false);
     config.hide_on_blur = json.value("hide_on_blur", false);
@@ -66,7 +67,7 @@ Config config_from_json(const Json& json) {
 }
 Json config_json(const Config& c) {
     return {{"version", 1}, {"show_obs", c.show_obs}, {"check_updates", c.check_updates}, {"auto_update", c.auto_update}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
-        {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
+        {"oled_protection", c.oled_protection}, {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
         {"target_pid", c.target_pid}, {"refresh_ms", c.refresh_ms}, {"font_size", c.font_size}, {"opacity", c.opacity},
         {"anchor", c.anchor}, {"margin_x", c.margin_x}, {"margin_y", c.margin_y}, {"gpu_id", c.gpu_id},
         {"metrics", c.metrics}, {"ignored_processes", c.ignored_processes}, {"known_games", c.known_games}};

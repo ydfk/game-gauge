@@ -93,6 +93,8 @@ void SettingsWindow::appearance_page(float width) {
         D2D1::RectF(column, 426, right, 496), [this](float) { config_.hide_on_blur = !config_.hide_on_blur; apply(); });
     toggle(L"录屏与截图隐藏", L"捕获画面中不包含监控条", config_.exclude_capture,
         D2D1::RectF(column, 508, right, 578), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
+    toggle(L"OLED 防烧屏", L"每分钟微移，最大偏移 4 像素", config_.oled_protection,
+        D2D1::RectF(column, 590, right, 660), [this](float) { config_.oled_protection = !config_.oled_protection; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;

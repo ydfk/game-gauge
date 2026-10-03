@@ -78,6 +78,7 @@ struct Config {
     bool enabled{true};
     bool paused{};
     bool exclude_capture{true};
+    bool oled_protection{};
     bool graph{};
     bool preview{};
     bool hide_on_blur{false};
