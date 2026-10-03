@@ -56,6 +56,7 @@ private:
     void history_detail(float width);
     void history_chart(const Json& record, const std::string& metric, D2D1_RECT_F rect, D2D1_COLOR_F color);
     void export_history(const Json& record);
+    void history_exclusion_action(const Json& record, D2D1_RECT_F rect);
     void updates_page(float width);
     void list_surface(D2D1_RECT_F rect, bool selected = false);
     void row_action(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> action, bool accent = false);

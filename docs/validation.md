@@ -253,3 +253,10 @@
 - 历史列表改为紧凑六行分页，显示图标/中文名、开始时间/时长、平均 FPS、详情/导出/删除；全部统计、曲线仍保留在详情页。请求分页与显示分页同时从 2 改为 6。
 - 游戏/排除列表使用统一表面，更新页把检查/下载/安装操作归入版本卡片，并独立分组自动更新偏好。
 - Release 构建、core_contracts / ipc_contracts 通过。隔离样本生成全部页面在 96/120/144 DPI、历史四种详情、OBS 四状态、硬盘及旧记录样图；检查外观、监控、游戏、更新及满六条历史渲染。输出 build/runtime-test/settings-style-1da131adb10b4ebd919567a55a67db51，满页历史 build/validation/settings-history-020.png。
+## 2026-10-03 — 0.1.21 更新页与历史排除
+
+- 更新页移除大面积版本卡片及仓库提示，以当前版本、状态行、单一主操作呈现；按 available/ready/checking/downloading/installing 状态切换下载、安装和忙碌显示，错误信息仍保留。
+- 侧栏底部改为同一行的版本入口和退出操作，点击版本可进入更新页。
+- 历史列表及详情新增排除操作，复用游戏页排除逻辑：优先使用进程路径，无路径时使用记录的游戏进程名；移除同名手动识别项，保存排除规则并显示已排除，已有记录保留。
+- Release 打包及 core_contracts/ipc_contracts 通过；检查更新六种状态、96/144 DPI 下六条历史、排除前后及详情入口样图。此次没有点击排除用户的真实应用。
+- 已安装 0.1.21，运行版本确认，Settings 安装文件 SHA256 与构建产物一致，hud_error 为空。样图位于 build/validation/settings-update-installed-021.png、history-exclude-021.png、history-excluded-021.png。

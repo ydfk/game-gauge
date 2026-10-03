@@ -92,14 +92,15 @@ void SettingsWindow::history_page(float width) {
             left + span * .38f, y + 32, span * .24f, 22, small_.Get(), muted);
         const auto fps = stat_for(row, "fps").value("average", Json{});
         label(reading(fps), left + span * .63f, y + 15, 80, 28, mono_.Get(), stat_color("fps", fps));
-        row_action(L"详情", D2D1::RectF(right - 170, y + 13, right - 120, y + 47), [this, id = row.at("id").get<std::string>()](float) {
+        row_action(L"详情", D2D1::RectF(right - 170, y + 3, right - 94, y + 33), [this, id = row.at("id").get<std::string>()](float) {
             history_selected_ = id; history_tab_ = 0; history_metric_ = 0; refresh();
         }, true);
-        row_action(L"导出", D2D1::RectF(right - 115, y + 13, right - 65, y + 47), [this, row](float) { export_history(row); });
-        row_action(L"删除", D2D1::RectF(right - 60, y + 13, right - 10, y + 47), [this, id = row.at("id").get<std::string>()](float) {
+        row_action(L"导出", D2D1::RectF(right - 86, y + 3, right - 10, y + 33), [this, row](float) { export_history(row); });
+        row_action(L"删除", D2D1::RectF(right - 86, y + 35, right - 10, y + 65), [this, id = row.at("id").get<std::string>()](float) {
             try { ipc_request({{"command", "delete_history"}, {"id", id}}); history_page_index_ = 0; refresh(); }
             catch (const std::exception& e) { error_ = e.what(); }
         });
+        history_exclusion_action(row, D2D1::RectF(right - 170, y + 35, right - 94, y + 65));
         y += 70;
         if (y + 8 < table_bottom) line(left + 16, y, right - 16, y, tint(edge, .65f));
     }
@@ -182,7 +183,8 @@ void SettingsWindow::history_detail(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto& row = history_detail_;
     row_action(L"‹ 返回记录", D2D1::RectF(left, 142, left + 100, 174), [this](float) { history_selected_.clear(); refresh(); }, true);
-    game_identity(row, left + 120, 135, span - 205);
+    game_identity(row, left + 120, 135, span - 290);
+    history_exclusion_action(row, D2D1::RectF(right - 145, 142, right - 65, 174));
     row_action(L"导出", D2D1::RectF(right - 55, 142, right, 174), [this, row](float) { export_history(row); });
     label(time_text(row.value("started_ms", 0ull)) + L" → " + time_text(row.value("updated_ms", 0ull)) + L"  ·  游玩 " + duration(row.value("active_seconds", 0.0)), left, 182, span, 25, small_.Get(), muted);
     const wchar_t* tabs[]{L"性能报告", L"性能图表", L"会话事件", L"设备信息"};

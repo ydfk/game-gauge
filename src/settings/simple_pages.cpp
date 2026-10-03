@@ -217,19 +217,34 @@ void SettingsWindow::updates_page(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto update = status_.value("update", Json::object());
     const auto state = update.value("state", std::string{});
-    fill(D2D1::RectF(left, 148, right, 282), panel, 10);
-    label(L"游戏仪表 " + wide(update.value("current", std::string(GAMEGAUGE_VERSION))), left + 20, 168, span - 40, 28, heading_.Get(), white);
-    label(wide(update.value("message", std::string("等待主程序连接"))), left + 20, 207, span - 350, 26, body_.Get(), muted);
-    button(L"检查更新", D2D1::RectF(right - 310, 215, right - 170, 255), [this](float) { command("check_update"); });
-    if (state == "available") button(L"下载更新", D2D1::RectF(right - 156, 215, right - 20, 255), [this](float) { command("download_update"); }, true);
-    if (state == "ready") button(L"安装更新", D2D1::RectF(right - 156, 215, right - 20, 255), [this](float) { command("install_update"); }, true);
-    label(L"更新偏好", left, 314, span, 28, heading_.Get(), white);
-    toggle(L"自动检查更新", L"每六小时检查稳定版本", config_.check_updates,
-        D2D1::RectF(left, 366, right, 438), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
-    toggle(L"自动下载并更新", L"下载完成后，等待游戏退出再安装", config_.auto_update,
-        D2D1::RectF(left, 452, right, 524), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
-    const auto repository = update.value("repository", std::string{});
-    label(repository.empty() ? L"本地构建尚未配置 GitHub 发布仓库" : L"更新来源：GitHub / " + wide(repository), left, 557, span, 26, small_.Get(), muted);
-
+    const bool available = state == "available", ready = state == "ready";
+    const bool busy = state == "checking" || state == "downloading" || state == "installing";
+    label(L"当前版本", left, 158, 180, 24, small_.Get(), muted);
+    label(L"v" + wide(GAMEGAUGE_VERSION), left, 193, span - 230, 44, title_.Get(), white);
+    const auto action = D2D1::RectF(right - 150, 194, right, 236);
+    if (busy) {
+        fill(action, panel, 7);
+        text(state == "checking" ? L"检查中…" : state == "downloading" ? L"下载中…" : L"安装中…", action, button_format_.Get(), muted);
+    } else button(ready ? L"安装更新" : available ? L"下载更新" : L"检查更新", action,
+        [this, ready, available](float) { command(ready ? "install_update" : available ? "download_update" : "check_update"); }, true);
+    const auto status_ink = state == "error" ? amber : available || ready ? blue : muted;
+    fill(D2D1::RectF(left, 263, left + 5, 268), status_ink, 3);
+    auto message = wide(update.value("message", std::string("尚未检查更新")));
+    if (available) message = L"发现新版本 v" + wide(update.value("version", std::string{}));
+    label(message, left + 16, 250, span - 16, 32, small_.Get(), status_ink);
+    line(left, 309, right, 309, edge);
+    label(L"自动更新", left, 341, span, 28, heading_.Get(), white);
+    toggle(L"检查新版本", L"每六小时检查一次", config_.check_updates,
+        D2D1::RectF(left, 388, right, 454), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
+    toggle(L"下载并安装", L"游戏退出后安装", config_.auto_update,
+        D2D1::RectF(left, 464, right, 530), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
+}
+void SettingsWindow::history_exclusion_action(const Json& record, D2D1_RECT_F rect) {
+    auto path = record.value("path", std::string{});
+    if (path.empty()) path = record.value("game", std::string{});
+    const auto name = utf8(std::filesystem::path(wide(path)).filename().wstring());
+    if (name.empty()) { text(L"不可排除", rect, button_format_.Get(), muted); return; }
+    if (contains(config_.ignored_processes, name)) { text(L"已排除", rect, button_format_.Get(), muted); return; }
+    row_action(L"排除", rect, [this, path](float) { remember(config_, path, true); apply(); });
 }
 }

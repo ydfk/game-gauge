@@ -121,11 +121,13 @@ void SettingsWindow::navigation(float width, float height) {
             page_ = i; focused_ = -1; if (page_ == 3) refresh(); InvalidateRect(window_, nullptr, FALSE);
         });
     }
-    button(quitting_ ? L"正在退出…" : L"退出程序", D2D1::RectF(28, height - 151, 208, height - 113),
-        [this](float) { quit_program(); }, false, true);
-    line(28, height - 104, 208, height - 104, edge);
-
-    label(L"版本 " + wide(GAMEGAUGE_VERSION), 28, height - 55, 180, 20, small_.Get(), muted);
+    line(28, height - 83, 208, height - 83, tint(edge, .65f));
+    const auto version_rect = D2D1::RectF(24, height - 69, 132, height - 31);
+    if (hovered(version_rect)) fill(version_rect, panel, 6);
+    label(L"v" + wide(GAMEGAUGE_VERSION) + L"  ›", 32, height - 62, 95, 24, small_.Get(), hovered(version_rect) ? blue : muted);
+    add(version_rect, [this](float) { page_ = 4; focused_ = -1; refresh(); });
+    row_action(quitting_ ? L"退出中…" : L"退出", D2D1::RectF(152, height - 69, 212, height - 31),
+        [this](float) { quit_program(); });
     fill(D2D1::RectF(236, 0, width, height), background);
 }
 std::optional<LRESULT> SettingsWindow::interaction_message(UINT message, WPARAM, LPARAM lparam) {
