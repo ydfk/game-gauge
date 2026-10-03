@@ -77,7 +77,7 @@ void SettingsWindow::appearance_page(float width) {
     slider(L"字号", std::format(L"{:.0f}", config_.font_size), static_cast<float>((config_.font_size - 10) / 22),
         D2D1::RectF(left, 445, left + half, 517), [this, left, half](float x) {
             config_.font_size = 10 + 22 * std::clamp((x - left - 18) / (half - 36), 0.f, 1.f); apply(); });
-    slider(L"背景深浅", std::format(L"{:.0f}%", config_.opacity * 100), static_cast<float>(config_.opacity),
+    slider(L"底色浓度", std::format(L"{:.0f}%", config_.opacity * 100), static_cast<float>(config_.opacity),
         D2D1::RectF(left + half + 14, 445, right, 517), [this, left, half](float x) {
             config_.opacity = std::clamp((x - left - half - 32) / (half - 36), 0.f, 1.f); apply(); });
     label(L"位置", left, 545, 150, 28, heading_.Get(), white);

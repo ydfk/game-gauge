@@ -23,6 +23,19 @@ float text_width(IDWriteFactory* write, IDWriteTextFormat* format, const std::ws
 }
 struct Item { const HudItem* source; float label_width{}, value_width{}; IDWriteTextFormat* value_format{}; };
 struct Group { std::wstring name; std::string status; std::vector<Item> items; float width{padding * 2}; };
+struct Palette { unsigned surface, accent, label; };
+Palette palette(const Group& group) {
+    if (group.status == "paused") return {0xFFD46B, 0xAE6A0A, 0x60400D};
+    if (group.status == "recording") return {0xBEEBD4, 0x35835A, 0x28563D};
+    if (group.status == "idle") return {0xFFE8AE, 0xA2782C, 0x655022};
+    if (!group.status.empty()) return {0xE1E7EC, 0x788793, 0x415361};
+    if (group.name == L"帧率") return {0xACE8B7, 0x2F8D4A, 0x214B30};
+    if (group.name == L"CPU") return {0xFFD3A3, 0xB77331, 0x5E371B};
+    if (group.name == L"GPU") return {0xB6DEFA, 0x3C86BA, 0x204460};
+    if (group.name == L"内存") return {0xD8C6F6, 0x8B65B6, 0x472C60};
+    if (group.name == L"硬盘") return {0xF6C8D7, 0xAC647E, 0x63354A};
+    return {0xE0E8EC, 0x7A929C, 0x445762};
+}
 struct Layout {
     ComPtr<IDWriteTextFormat> labels, values, primary;
     std::vector<Group> groups;
@@ -54,27 +67,29 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
     const Layout& layout, const Config& config, float left, float width) {
     if (width <= 0) return;
     const bool paused = group.status == "paused";
+    const auto colors = palette(group);
     const float height = layout.row_height;
     const auto rect = D2D1::RectF(left + .5f, .5f, left + width - .5f, height - .5f);
     const auto round = D2D1::RoundedRect(rect, 4, 4);
-    brush->SetColor(D2D1::ColorF(paused ? 0xD3BD91 : group.name == L"帧率" ? 0x383D40 : 0x292D30,
+    brush->SetColor(D2D1::ColorF(colors.surface,
         paused ? 1.f : static_cast<float>(config.opacity)));
     target->FillRoundedRectangle(round, brush);
-    brush->SetColor(D2D1::ColorF(paused ? 0xEAD9B7 : 0xADB4B3, paused ? .65f : .22f));
+    brush->SetColor(D2D1::ColorF(colors.accent, .75f));
     target->DrawRoundedRectangle(round, brush, 1);
+    target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(left + 1, 5, left + 3, height - 5), 1, 1), brush);
     target->PushAxisAlignedClip(D2D1::RectF(left + 2, 0, left + width - 2, height), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     float x = left + padding;
     for (size_t i = 0; i < group.items.size(); ++i) {
         const auto& item = group.items[i]; const auto& source = *item.source;
         if (i) x += item_gap;
         if (item.label_width > 0) {
-            brush->SetColor(D2D1::ColorF(paused ? 0x51462F : 0xBFC4C2));
+            brush->SetColor(D2D1::ColorF(colors.label));
             target->DrawTextW(source.label.c_str(), static_cast<UINT32>(source.label.size()), layout.labels.Get(),
                 D2D1::RectF(x, 0, x + item.label_width + 2, height), brush);
             x += item.label_width + label_gap;
         }
         if (!source.status.empty()) {
-            brush->SetColor(D2D1::ColorF(paused ? 0x403722 : source.status == "recording" ? 0xECA498 : 0xB4BCB9));
+            brush->SetColor(D2D1::ColorF(paused ? 0x60400D : source.status == "recording" ? 0xB83232 : colors.label));
             const float cy = height / 2;
             if (paused) {
                 target->FillRectangle(D2D1::RectF(x + 1, cy - 4, x + 3, cy + 4), brush);
@@ -86,7 +101,7 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
             }
             x += 12;
         }
-        brush->SetColor(paused ? D2D1::ColorF(0x29271F) : source.status.empty() ? source.color : D2D1::ColorF(0xECEBE6));
+        brush->SetColor(source.status.empty() ? source.color : D2D1::ColorF(0x25313A));
         target->DrawTextW(source.value.c_str(), static_cast<UINT32>(source.value.size()), item.value_format,
             D2D1::RectF(x, 0, x + item.value_width + 2, height), brush);
         x += item.value_width;
@@ -102,7 +117,7 @@ void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std:
     const Config& config, float width, float height) {
     const auto measured = layout(write, items, config);
     ComPtr<ID2D1SolidColorBrush> brush;
-    check(target->CreateSolidColorBrush(D2D1::ColorF(0x292D30, static_cast<float>(config.opacity)), &brush));
+    check(target->CreateSolidColorBrush(D2D1::ColorF(0xE0E8EC, static_cast<float>(config.opacity)), &brush));
     if (config.graph) target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, measured.row_height, width, height), 4, 4), brush.Get());
     const bool obs = !measured.groups.empty() && !measured.groups.back().status.empty();
     const auto count = measured.groups.size() - (obs ? 1 : 0);
