@@ -72,7 +72,7 @@ void SettingsWindow::appearance_page(float width) {
     label(fit < 1 ? L"按可用宽度缩小显示" : L"与游戏内共用字号、颜色、间距及实时读数", left + 18, 253, span - 36, 22, small_.Get(), muted);
     toggle(L"游戏内监控", L"识别游戏后自动显示，退出后关闭", config_.enabled,
         D2D1::RectF(left, 365, left + half, 427), [this](float) { config_.enabled = !config_.enabled; apply(); });
-    toggle(L"录屏隐藏监控", L"让录制画面保持干净", config_.exclude_capture,
+    toggle(L"录屏隐藏监控", L"从录屏及系统截图中排除监控条", config_.exclude_capture,
         D2D1::RectF(left + half + 14, 365, right, 427), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
     slider(L"字号", std::format(L"{:.0f}", config_.font_size), static_cast<float>((config_.font_size - 10) / 22),
         D2D1::RectF(left, 445, left + half, 517), [this, left, half](float x) {
@@ -86,6 +86,8 @@ void SettingsWindow::appearance_page(float width) {
     for (int i = 0; i < 4; ++i) button(anchors[i], D2D1::RectF(left + i * (box + 12), 587, left + i * (box + 12) + box, 629),
         [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
     label(L"切换位置会立即更新预览；回到游戏后自动应用。", left, 649, span, 24, small_.Get(), muted);
+    toggle(L"切出游戏后隐藏", L"关闭时跟随游戏窗口显示，最小化或退出后隐藏", config_.hide_on_blur,
+        D2D1::RectF(left, 685, right, 747), [this](float) { config_.hide_on_blur = !config_.hide_on_blur; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;

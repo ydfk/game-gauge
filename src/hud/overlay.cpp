@@ -1,6 +1,7 @@
 #include "overlay.h"
 #include "common/platform.h"
 #include <windowsx.h>
+#include <dwmapi.h>
 #include <sstream>
 #include <algorithm>
 
@@ -42,10 +43,12 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
     const auto target = reinterpret_cast<HWND>(snapshot.target.window);
     DWORD target_pid{};
     if (target) GetWindowThreadProcessId(target, &target_pid);
+    BOOL cloaked{};
+    if (target) DwmGetWindowAttribute(target, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     const bool real_target = target && IsWindow(target) && target_pid == snapshot.target.pid &&
-        !IsIconic(target) && snapshot.game_confirmed;
+        !IsIconic(target) && IsWindowVisible(target) && !cloaked && snapshot.game_confirmed;
     // 编辑也必须依附仍然存在的游戏，退出游戏后绝不回退到桌面。
-    if (!real_target || (!config.enabled && !editing_) || (!snapshot.target.foreground && !editing_)) {
+    if (!real_target || (!config.enabled && !editing_) || (config.hide_on_blur && !snapshot.target.foreground && !editing_)) {
         if (!real_target && editing_) edit(false);
         ShowWindow(window_, SW_HIDE); return;
     }
@@ -75,8 +78,16 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         int y = config.anchor == 3 ? bounds.bottom - size.cy - y_margin : bounds.top + y_margin;
         x = std::clamp<LONG>(x, bounds.left, std::max(bounds.left, bounds.right - size.cx));
         y = std::clamp<LONG>(y, bounds.top, std::max(bounds.top, bounds.bottom - size.cy));
+        HWND above = HWND_TOPMOST;
+        if (!snapshot.target.foreground && !editing_) {
+            // 后台监控紧随游戏的 Z 序，被其他应用覆盖时也一起被覆盖。
+            SetWindowPos(window_, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            above = GetWindow(target, GW_HWNDPREV);
+            if (above == window_) above = GetWindow(window_, GW_HWNDPREV);
+            if (!above || (GetWindowLongPtrW(above, GWL_EXSTYLE) & WS_EX_TOPMOST)) above = HWND_TOP;
+        }
         if (!editing_ || !edit_placed_) {
-            SetWindowPos(window_, HWND_TOPMOST, x, y, size.cx, size.cy, SWP_NOACTIVATE);
+            SetWindowPos(window_, above, x, y, size.cx, size.cy, SWP_NOACTIVATE);
             if (editing_) edit_placed_ = true;
         } else {
             RECT current{}; GetWindowRect(window_, &current);

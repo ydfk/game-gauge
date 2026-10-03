@@ -22,12 +22,12 @@ MetricTone rising(double value, double watch, double high, double critical) {
 uint32_t tone_rgb(MetricTone tone) {
     switch (tone) {
     case MetricTone::muted: return 0x9AACC0;
-    case MetricTone::good: return 0x75DFB0;
-    case MetricTone::cool: return 0x83BEFF;
-    case MetricTone::watch: return 0xF1CC75;
-    case MetricTone::high: return 0xFFAA68;
-    case MetricTone::critical: return 0xFF7D8C;
-    default: return 0xEDF3FA;
+    case MetricTone::good: return 0x50FF00;
+    case MetricTone::cool: return 0x30C8FF;
+    case MetricTone::watch: return 0xFFE000;
+    case MetricTone::high: return 0xFFA000;
+    case MetricTone::critical: return 0xFF4040;
+    default: return 0xFFFFFF;
     }
 }
 MetricTone metric_tone(std::string_view id, std::optional<double> value) {

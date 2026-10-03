@@ -27,7 +27,7 @@ Config config_from_json(const Json& json) {
     config.exclude_capture = json.value("exclude_capture", true);
     config.graph = json.value("graph", false);
     config.preview = json.value("preview", false);
-    config.hide_on_blur = json.value("hide_on_blur", true);
+    config.hide_on_blur = json.value("hide_on_blur", false);
     config.auto_target = json.value("auto_target", true);
     config.target_pid = json.value("target_pid", 0u);
     config.refresh_ms = std::clamp(json.value("refresh_ms", 250u), 100u, 2000u);

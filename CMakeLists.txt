@@ -70,3 +70,8 @@ add_test(NAME core_contracts COMMAND GameGauge.Tests)
 add_test(NAME ipc_contracts COMMAND GameGauge.IpcTests)
 set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGauge.Settings GameGauge.RenderProbe GameGauge.Tests GameGauge.IpcTests GameGauge.SetupPreview
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+# 需要交互式 Windows 桌面，手动执行此窗口生命周期回归。
+add_executable(GameGauge.OverlayTests tests/overlay_visibility.cpp src/hud/overlay.cpp src/hud/renderer.cpp src/hud/layout.cpp)
+target_link_libraries(GameGauge.OverlayTests PRIVATE gauge_common d2d1 dwrite d3d11 dcomp dwmapi)
+set_target_properties(GameGauge.OverlayTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

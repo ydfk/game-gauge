@@ -80,7 +80,7 @@ struct Config {
     bool exclude_capture{true};
     bool graph{};
     bool preview{};
-    bool hide_on_blur{true};
+    bool hide_on_blur{false};
     bool auto_target{true};
     uint32_t target_pid{};
     uint32_t refresh_ms{250};

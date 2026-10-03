@@ -55,8 +55,8 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
     if (width <= 0) return;
     const bool paused = group.status == "paused";
     const float height = layout.row_height;
-    const auto status_color = D2D1::ColorF(paused ? 0xFFD166 :
-        group.status == "recording" ? 0x79D9A3 : 0xADB5BF);
+    const auto status_color = D2D1::ColorF(paused ? 0xFFE000 :
+        group.status == "recording" ? 0x50FF00 : 0xADB5BF);
     // 连续黑色底板通过细分隔线分组，让读数保持清晰。
     if (left > 0) {
         brush->SetColor(D2D1::ColorF(0xFFFFFF, .25f));
@@ -69,7 +69,7 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
         const auto& item = group.items[i]; const auto& source = *item.source;
         if (i) x += item_gap;
         if (item.label_width > 0) {
-            brush->SetColor(D2D1::ColorF(0xBCC3CC));
+            brush->SetColor(D2D1::ColorF(0xE8ECF0));
             target->DrawTextW(source.label.c_str(), static_cast<UINT32>(source.label.size()), layout.labels.Get(),
                 D2D1::RectF(x, 0, x + item.label_width + 2, height), brush);
             x += item.label_width + label_gap;
