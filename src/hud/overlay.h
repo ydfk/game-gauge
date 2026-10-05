@@ -1,5 +1,6 @@
 #pragma once
 #include "renderer.h"
+#include "pause_notice.h"
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -22,6 +23,7 @@ public:
 private:
     static LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
     HWND window_{};
+    std::unique_ptr<PauseNotice> pause_notice_;
     std::unique_ptr<Renderer> renderer_;
     bool editing_{}, edit_placed_{}, capture_requested_{}, affinity_enabled_{};
     std::optional<bool> edit_result_;

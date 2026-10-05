@@ -52,7 +52,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     overlay_ = std::make_unique<Overlay>(instance);
     updater_.configure(config_.check_updates, config_.auto_update);
-    obs_.configure(config_.show_obs);
+    obs_.configure(config_.show_obs || config_.obs_pause_notice);
     add_tray();
     const auto mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     if (!RegisterHotKey(window_, 1, mods, VK_F6) || !RegisterHotKey(window_, 2, mods, VK_F7) || !RegisterHotKey(window_, 3, mods, VK_F8))
@@ -76,7 +76,7 @@ void Application::update_config(Config next) {
     { std::lock_guard lock(mutex_); config_ = next; }
     sampler_.configure(std::move(next));
     const auto saved = config(); updater_.configure(saved.check_updates, saved.auto_update);
-    obs_.configure(saved.show_obs);
+    obs_.configure(saved.show_obs || saved.obs_pause_notice);
 }
 void Application::add_tray() {
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1;

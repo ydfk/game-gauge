@@ -5,7 +5,7 @@
 using Microsoft::WRL::ComPtr;
 void check(HRESULT hr) { if (FAILED(hr)) throw std::runtime_error("HUD preview failed"); }
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2) return 2;
+    if (argc != 2 && argc != 3) return 2;
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
         ComPtr<IWICImagingFactory> wic;
@@ -23,6 +23,10 @@ int wmain(int argc, wchar_t** argv) {
         s.hardware.gpus.push_back(gpu); s.selected_gpu = gpu.id; s.session_seconds = 1850;
         gauge::Config config; config.font_size = 18; config.show_obs = true;
         target->BeginDraw(); target->Clear(D2D1::ColorF(0x33465B));
+        if (argc == 3) {
+            target->SetTransform(D2D1::Matrix3x2F::Translation(152, 95));
+            gauge::draw_pause_notice(target.Get(), write.Get(), 720, 210, true);
+        } else {
         float y = 25;
         size_t row{};
         const unsigned backgrounds[]{0xDCE4ED, 0x121A20, 0x607259, 0xDACBB7, 0x33465B};
@@ -50,6 +54,7 @@ int wmain(int argc, wchar_t** argv) {
         target->SetTransform(D2D1::Matrix3x2F::Translation(20, y));
         const auto narrow_size = gauge::measure_hud_items(write.Get(), narrow_items, config);
         gauge::draw_hud_items(target.Get(), write.Get(), narrow_items, config, 420, narrow_size.height);
+        }
         check(target->EndDraw());
         ComPtr<IWICStream> stream; check(wic->CreateStream(&stream)); check(stream->InitializeFromFilename(argv[1], GENERIC_WRITE));
         ComPtr<IWICBitmapEncoder> encoder; check(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder));

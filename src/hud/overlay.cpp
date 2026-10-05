@@ -14,6 +14,7 @@ Overlay::Overlay(HINSTANCE instance) {
         cls.lpszClassName, L"游戏仪表 · 顶部监控", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance, this);
     if (!window_) throw std::runtime_error(error_text(GetLastError()));
     renderer_ = std::make_unique<Renderer>(window_);
+    pause_notice_ = std::make_unique<PauseNotice>(instance);
 }
 Overlay::~Overlay() { renderer_.reset(); if (window_) DestroyWindow(window_); }
 void Overlay::edit(bool enabled) {
@@ -36,6 +37,8 @@ int Overlay::dragged_y() const {
     return std::max(0, MulDiv(rect.top - bounds_.top, 96, GetDpiForWindow(window_)));
 }
 void Overlay::update(const Snapshot& snapshot, const Config& config) {
+    try { pause_notice_->update(snapshot, config); }
+    catch (const std::exception& exception) { error_ = exception.what(); return; }
     if (affinity_enabled_ != config.exclude_capture || (!capture_requested_ && !capture_error_)) {
         affinity_enabled_ = config.exclude_capture;
         capture_requested_ = SetWindowDisplayAffinity(window_, config.exclude_capture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE) != FALSE;
@@ -84,7 +87,6 @@ void Overlay::update(const Snapshot& snapshot, const Config& config) {
         if (config.oled_protection && !editing_) {
             const auto step = (GetTickCount64() - oled_started_) / 60000;
             x = oled_shift_axis(x, bounds.left, bounds.right - size.cx, step);
-            y = oled_shift_axis(y, bounds.top, bounds.bottom - size.cy, step / 2);
         }
         HWND above = HWND_TOPMOST;
         if (!snapshot.target.foreground && !editing_) {

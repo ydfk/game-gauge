@@ -93,8 +93,10 @@ void SettingsWindow::appearance_page(float width) {
         D2D1::RectF(column, 426, right, 496), [this](float) { config_.hide_on_blur = !config_.hide_on_blur; apply(); });
     toggle(L"录屏与截图隐藏", L"捕获画面中不包含监控条", config_.exclude_capture,
         D2D1::RectF(column, 508, right, 578), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
-    toggle(L"OLED 防烧屏", L"每分钟微移，最大偏移 4 像素", config_.oled_protection,
+    toggle(L"OLED 防烧屏", L"仅左右微移，最大偏移 4 像素", config_.oled_protection,
         D2D1::RectF(column, 590, right, 660), [this](float) { config_.oled_protection = !config_.oled_protection; apply(); });
+    toggle(L"OBS 暂停大字提醒", L"显示在游戏中央，可关闭本次提醒", config_.obs_pause_notice,
+        D2D1::RectF(column, 672, right, 742), [this](float) { config_.obs_pause_notice = !config_.obs_pause_notice; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;

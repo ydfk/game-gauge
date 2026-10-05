@@ -33,7 +33,7 @@ target_include_directories(gauge_metrics PRIVATE third_party/presentmon)
 target_link_libraries(gauge_metrics PUBLIC gauge_common dxgi pdh psapi powrprof dwmapi setupapi)
 add_executable(GameGauge WIN32
   src/host/main.cpp src/host/application.cpp src/host/ipc_server.cpp src/host/updater.cpp src/host/obs.cpp
-  src/hud/overlay.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
+  src/hud/overlay.cpp src/hud/pause_notice.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
 target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dwmapi comctl32 winhttp bcrypt crypt32)
 target_link_options(GameGauge PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.Diagnostics src/diagnostics/main.cpp src/host/ipc_server.cpp)
@@ -72,6 +72,6 @@ set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGau
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # 需要交互式 Windows 桌面，手动执行此窗口生命周期回归。
-add_executable(GameGauge.OverlayTests tests/overlay_visibility.cpp src/hud/overlay.cpp src/hud/renderer.cpp src/hud/layout.cpp)
+add_executable(GameGauge.OverlayTests tests/overlay_visibility.cpp src/hud/overlay.cpp src/hud/pause_notice.cpp src/hud/renderer.cpp src/hud/layout.cpp)
 target_link_libraries(GameGauge.OverlayTests PRIVATE gauge_common d2d1 dwrite d3d11 dcomp dwmapi)
 set_target_properties(GameGauge.OverlayTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
