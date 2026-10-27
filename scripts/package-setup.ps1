@@ -6,12 +6,12 @@ if (!$Version) { $Version = (Get-Content -LiteralPath "$taskRoot/VERSION" -Raw).
 $taskBuild = Join-Path $taskRoot 'build/setup'
 $taskStage = Join-Path $taskBuild ('stage-' + [guid]::NewGuid().ToString('N'))
 $taskApp = Join-Path $taskStage 'app'
-New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp/licenses" -Force | Out-Null
+New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp/licenses","$taskApp/components" -Force | Out-Null
 @{version=$Version;repository=$Repository} | ConvertTo-Json | Set-Content "$taskApp/release.json" -Encoding utf8
 foreach ($taskName in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe')) {
     Copy-Item -LiteralPath (Join-Path $taskRoot "build/core/bin/Release/$taskName") -Destination $taskApp
 }
-foreach ($taskName in @('install-presentmon.ps1','setup-uninstall.ps1','setup-processes.ps1','setup-shortcuts.ps1')) {
+foreach ($taskName in @('install-presentmon.ps1','repair-components.ps1','setup-uninstall.ps1','setup-processes.ps1','setup-shortcuts.ps1')) {
     [IO.File]::WriteAllText((Join-Path "$taskApp/scripts" $taskName), [IO.File]::ReadAllText((Join-Path $PSScriptRoot $taskName)), [Text.UTF8Encoding]::new($true))
 }
 Copy-Item -LiteralPath "$taskRoot/.deps/AMDFamily17-0.2.11.bin" -Destination "$taskApp/.deps"
@@ -26,8 +26,9 @@ foreach ($taskDependency in $taskDependencies) {
     $taskSource = Join-Path "$taskRoot/.deps" $taskDependency.Source
     if ((Get-FileHash -LiteralPath $taskSource -Algorithm SHA256).Hash -ne $taskDependency.Hash) { throw "依赖校验失败：$taskSource" }
     if ((Get-AuthenticodeSignature -LiteralPath $taskSource).Status -ne 'Valid') { throw "依赖签名无效：$taskSource" }
-    Copy-Item -LiteralPath $taskSource -Destination (Join-Path $taskStage $taskDependency.Name)
+    Copy-Item -LiteralPath $taskSource -Destination (Join-Path "$taskApp/components" $taskDependency.Name)
 }
+& "$taskApp/scripts/repair-components.ps1" -VerifyOnly
 Compress-Archive -Path "$taskStage/*" -DestinationPath "$taskBuild/payload.zip" -Force
 $taskPayload = (Join-Path $taskBuild 'payload.zip').Replace('\','/')
 $taskInstall = (Join-Path $taskBuild 'install.ps1').Replace('\','/')

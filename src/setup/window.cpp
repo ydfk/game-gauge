@@ -77,9 +77,9 @@ void SetupWindow::complete(DWORD result) {
     if (!running_) return;
     // 退出通知可能早于下一次轮询，先读最终阶段，避免失败界面落后一个步骤。
     if (read_progress_) progress(read_progress_());
-    running_ = false; result_ = result; if (!result) progress_ = 100;
+    running_ = false; result_ = result; if (!result || result == ERROR_SUCCESS_REBOOT_REQUIRED) progress_ = 100;
     KillTimer(window_, 1); SetPropW(window_, L"GameGauge.Setup.Completed", reinterpret_cast<HANDLE>(1));
-    SetWindowTextW(window_, result ? L"游戏仪表 · 安装未完成" : L"游戏仪表 · 安装完成");
+    SetWindowTextW(window_, result && result != ERROR_SUCCESS_REBOOT_REQUIRED ? L"游戏仪表 · 安装未完成" : L"游戏仪表 · 安装完成");
     EnableMenuItem(GetSystemMenu(window_, FALSE), SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
     InvalidateRect(window_, nullptr, FALSE);
 }
@@ -130,7 +130,8 @@ void SetupWindow::button(const wchar_t* caption, D2D1_RECT_F rect, int action, b
 }
 void SetupWindow::paint() {
     if (!target_) create_target();
-    const bool failed = !running_ && result_;
+    const bool reboot = !running_ && result_ == ERROR_SUCCESS_REBOOT_REQUIRED;
+    const bool failed = !running_ && result_ && !reboot;
     const auto accent = failed ? error : mint;
     const int stage = current_stage(progress_);
     target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_)); target_->Clear(background);
@@ -146,7 +147,8 @@ void SetupWindow::paint() {
     line(715, 25, 725, 35, close_color, 1.5f); line(715, 35, 725, 25, close_color, 1.5f);
     line(36, 104, 724, 104, edge);
     text(running_ ? L"正在安装游戏仪表" : failed ? L"安装未完成" : L"安装完成", D2D1::RectF(36, 139, 520, 187), title_.Get(), white);
-    const std::wstring description = running_ ? descriptions[stage] : failed ? L"安装在“" + std::wstring(names[stage]) + L"”阶段停止，请打开日志查看原因。" : L"游戏仪表已启动，打开游戏即可开始监控。";
+    const std::wstring description = running_ ? descriptions[stage] : failed ? L"安装在“" + std::wstring(names[stage]) + L"”阶段停止，请打开日志查看原因。" :
+        reboot ? L"安装完成；请重启 Windows 以完成采集组件安装。" : L"游戏仪表已启动，打开游戏即可开始监控。";
     text(description, D2D1::RectF(37, 195, 724, 224), body_.Get(), muted);
     text(std::to_wstring(progress_) + L"%", D2D1::RectF(540, 131, 724, 189), number_.Get(), accent, DWRITE_TEXT_ALIGNMENT_TRAILING);
     fill(D2D1::RectF(36, 245, 724, 253), panel, 4);
@@ -180,13 +182,13 @@ int SetupWindow::hit(float x, float y) const {
     if (running_) return 0;
     if (y >= 428 && y <= 472) {
         if (x >= 604 && x <= 724) return 1;
-        if (result_ && x >= 484 && x <= 590) return 2;
+        if (result_ && result_ != ERROR_SUCCESS_REBOOT_REQUIRED && x >= 484 && x <= 590) return 2;
     }
     return 0;
 }
 void SetupWindow::activate(int action) {
     if (action == 3 && (!running_ || allow_close_)) DestroyWindow(window_);
-    else if (!running_ && action == 1 && result_) { if (logs_) logs_(); }
+    else if (!running_ && action == 1 && result_ && result_ != ERROR_SUCCESS_REBOOT_REQUIRED) { if (logs_) logs_(); }
     else if (!running_ && action) DestroyWindow(window_);
 }
 LRESULT CALLBACK SetupWindow::procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
@@ -229,7 +231,7 @@ LRESULT SetupWindow::message(UINT message, WPARAM wparam, LPARAM lparam) {
     case WM_KEYDOWN:
         if (wparam == VK_ESCAPE && (!running_ || allow_close_)) { DestroyWindow(window_); return 0; }
         if (!running_) {
-            if (wparam == VK_TAB) { focused_ = result_ && keyboard_focus_ ? (focused_ == 1 ? 2 : 1) : 1; keyboard_focus_ = true; InvalidateRect(window_, nullptr, FALSE); return 0; }
+            if (wparam == VK_TAB) { focused_ = result_ && result_ != ERROR_SUCCESS_REBOOT_REQUIRED && keyboard_focus_ ? (focused_ == 1 ? 2 : 1) : 1; keyboard_focus_ = true; InvalidateRect(window_, nullptr, FALSE); return 0; }
             if (wparam == VK_RETURN || wparam == VK_SPACE) { activate(focused_); return 0; }
         }
         break;

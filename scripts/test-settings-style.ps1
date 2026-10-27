@@ -34,6 +34,10 @@ $taskFixture = @{status=@{config=@{version=1;metrics=$taskIds;show_obs=$true};sn
     hud_preview=@(@{label='FPS';value='118';group='帧率';color=@(.459,.875,.69)},@{label='CPU';value='86°C  82%';group='CPU';color=@(1,.667,.408)},@{label='GPU';value='72°C  100%';group='GPU';color=@(1,.667,.408)},@{label='OBS';value='● 未录制';group='OBS';color=@(1,.667,.408)})};
     targets=@(@{name='界面验收游戏.exe';path='C:\Preview\game.exe';pid=777});history=@($taskRecord);history_detail=$taskRecord;active_seconds=3525;dates=@([DateTime]::Now.ToString('yyyy-MM-dd'))}
 $taskFixturePath = Join-Path $taskOutput 'fixture.json'
+$taskFixture.status.components = @{can_repair=$true;repair_state='idle';message='';items=@(
+    @{id='presentmon';name='帧率采集';state='ready';detail='正在接收游戏帧'},
+    @{id='pawnio';name='温度驱动';state='ready';detail='服务运行中'},
+    @{id='sensor';name='CPU 温度采集';state='ready';detail='正在接收温度读数'})}
 $taskEnvNames = @('GAMEGAUGE_SETTINGS_FIXTURE','GAMEGAUGE_SETTINGS_SNAPSHOT','GAMEGAUGE_SETTINGS_PAGE','GAMEGAUGE_SETTINGS_DPI','GAMEGAUGE_SETTINGS_HISTORY_ID','GAMEGAUGE_SETTINGS_HISTORY_TAB','GAMEGAUGE_SETTINGS_DISKS')
 $taskPrevious = @{}; foreach ($taskName in $taskEnvNames) { $taskPrevious[$taskName] = [Environment]::GetEnvironmentVariable($taskName) }
 function Save-StyleFixture { [IO.File]::WriteAllText($taskFixturePath,($taskFixture | ConvertTo-Json -Depth 15),[Text.UTF8Encoding]::new($false)) }
@@ -60,6 +64,20 @@ try {
     $taskRecord.stats.fps.minimum=$null; $taskRecord.legacy_values_hidden=$true; Save-StyleFixture
     $env:GAMEGAUGE_SETTINGS_HISTORY_ID=$taskRecord.id; $env:GAMEGAUGE_SETTINGS_HISTORY_TAB='0'
     Invoke-StyleShot 'legacy-no-minimum' 3
+    foreach ($taskState in @('missing','running','error','reboot','unavailable')) {
+        $taskFixture.status.components.can_repair=$taskState -ne 'unavailable'
+        $taskFixture.status.components.repair_state=$taskState
+        $taskFixture.status.components.items[1].state='missing'
+        $taskFixture.status.components.items[1].detail='PawnIO 驱动或接口缺失，可修复'
+        $taskFixture.status.components.message=switch ($taskState) {
+            'running' { '等待管理员授权并修复采集组件…' }
+            'error' { '修复失败（1），请打开修复日志' }
+            'reboot' { '组件已安装，请重启 Windows 完成修复' }
+            default { '' }
+        }
+        Save-StyleFixture; Invoke-StyleShot "components-$taskState" 4
+    }
+    Invoke-StyleShot 'components-warning' 1
     Write-Host "全部设置页、历史详情、OBS 四种状态与硬盘温度在隔离样本中渲染通过：$taskOutput"
 } finally {
     foreach ($taskName in $taskEnvNames) { [Environment]::SetEnvironmentVariable($taskName,$taskPrevious[$taskName]) }

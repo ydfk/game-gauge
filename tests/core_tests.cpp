@@ -17,10 +17,12 @@ void close(double actual, double expected, const char* message) { require(std::a
 }
 void telemetry_regressions();
 void metric_style_contracts();
+void component_contracts();
 int main() {
     try {
         telemetry_regressions();
         metric_style_contracts();
+        component_contracts();
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"obs_pause_notice", true}}))).obs_pause_notice, "OBS reminder setting must persist");
         require(!gauge::config_from_json(gauge::Json::object()).oled_protection, "legacy configs leave OLED shift off");
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"oled_protection", true}}))).oled_protection,

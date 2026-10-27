@@ -126,12 +126,13 @@ Json Application::request(const Json& command) {
         for (const auto& item : hud_items(snapshot, config_)) preview.push_back({{"label", utf8(item.label)}, {"value", utf8(item.value)},
             {"group", utf8(item.group)}, {"status", item.status}, {"color", {item.color.r, item.color.g, item.color.b}}});
         return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(snapshot)},
-            {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()},
+            {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()}, {"components", components_.status(snapshot)},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
             {"warning", warning_}, {"hud_error", hud_error_}};
     }
     if (action == "apply") { update_config(config_from_json(command.at("config"))); return {{"ok", true}}; }
     if (action == "check_update") { updater_.check(); return {{"ok", true}}; }
+    if (action == "repair_components") { components_.repair(); return {{"ok", true}}; }
     if (action == "download_update") { updater_.download(); return {{"ok", true}}; }
     if (action == "install_update") { updater_.install(); return {{"ok", true}}; }
     if (action == "targets") {
@@ -208,6 +209,23 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
                 self->overlay_->edit(false);
             }
             self->overlay_->update(self->snapshot(), self->config());
+            const auto component_status = self->components_.status(self->sampler_.snapshot());
+            const auto items = component_status.value("items", Json::array());
+            const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {
+                const auto state = item.value("state", std::string{});
+                return state == "missing" || state == "stopped" || state == "error";
+            });
+            if (!unhealthy) { self->component_issue_since_ = 0; self->component_notified_ = false; }
+            else {
+                if (!self->component_issue_since_) self->component_issue_since_ = GetTickCount64();
+                if (!self->component_notified_ && GetTickCount64() - self->component_issue_since_ >= 15000) {
+                    NOTIFYICONDATAW notice{sizeof(notice)}; notice.hWnd = window; notice.uID = 1; notice.uFlags = NIF_INFO;
+                    wcscpy_s(notice.szInfoTitle, L"采集组件需要检查");
+                    wcscpy_s(notice.szInfo, L"帧率或温度采集组件异常。请打开游戏仪表设置查看并修复。");
+                    notice.dwInfoFlags = NIIF_WARNING;
+                    if (Shell_NotifyIconW(NIM_MODIFY, &notice)) self->component_notified_ = true;
+                }
+            }
             self->capture_requested_ = self->overlay_->capture_requested(); self->capture_error_ = self->overlay_->capture_error();
             { std::lock_guard lock(self->mutex_); self->hud_error_ = self->overlay_->error(); }
             return 0;

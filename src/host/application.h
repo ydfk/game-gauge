@@ -5,6 +5,7 @@
 #include "ipc_server.h"
 #include "updater.h"
 #include "obs.h"
+#include "components.h"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -34,11 +35,14 @@ private:
     Sampler sampler_;
     Updater updater_;
     ObsMonitor obs_;
+    ComponentMonitor components_;
     std::unique_ptr<Overlay> overlay_;
     std::unique_ptr<IpcServer> ipc_;
     std::atomic<bool> capture_requested_{};
     std::atomic<DWORD> capture_error_{};
     std::string hud_error_, warning_;
+    uint64_t component_issue_since_{};
+    bool component_notified_{};
     bool show_settings_{};
     uint32_t timed_exit_{};
 };

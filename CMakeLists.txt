@@ -23,6 +23,7 @@ if(MSVC)
   add_compile_options(/W4 /permissive- /utf-8 /EHsc)
 endif()
 add_library(gauge_common STATIC
+  src/common/components.cpp
   src/common/config.cpp src/common/frame_statistics.cpp src/common/game_identity.cpp src/common/history.cpp src/common/metric_style.cpp src/common/platform.cpp src/common/sample_validation.cpp src/common/update_release.cpp)
 target_include_directories(gauge_common PUBLIC src third_party)
 target_link_libraries(gauge_common PUBLIC shell32 advapi32 version)
@@ -32,6 +33,7 @@ add_library(gauge_metrics STATIC
 target_include_directories(gauge_metrics PRIVATE third_party/presentmon)
 target_link_libraries(gauge_metrics PUBLIC gauge_common dxgi pdh psapi powrprof dwmapi setupapi)
 add_executable(GameGauge WIN32
+  src/host/components.cpp
   src/host/main.cpp src/host/application.cpp src/host/ipc_server.cpp src/host/updater.cpp src/host/obs.cpp
   src/hud/overlay.cpp src/hud/pause_notice.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
 target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dwmapi comctl32 winhttp bcrypt crypt32)
@@ -47,7 +49,7 @@ target_link_libraries(GameGauge.Settings PRIVATE gauge_common d2d1 dwrite window
 target_link_options(GameGauge.Settings PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.RenderProbe WIN32 tests/render_probe.cpp)
 target_link_libraries(GameGauge.RenderProbe PRIVATE d3d11 dxgi)
-add_executable(GameGauge.Tests tests/core_tests.cpp tests/telemetry_regressions.cpp tests/metric_style_tests.cpp)
+add_executable(GameGauge.Tests tests/core_tests.cpp tests/telemetry_regressions.cpp tests/metric_style_tests.cpp tests/component_tests.cpp src/host/components.cpp)
 target_link_libraries(GameGauge.Tests PRIVATE gauge_metrics)
 add_executable(GameGauge.IpcTests tests/ipc_tests.cpp src/host/ipc_server.cpp)
 target_link_libraries(GameGauge.IpcTests PRIVATE gauge_common)

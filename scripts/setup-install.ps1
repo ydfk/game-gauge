@@ -1,11 +1,15 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 Start-Transcript -LiteralPath (Join-Path $PSScriptRoot 'install.log') -Force | Out-Null
 function Set-InstallProgress([int]$Value) { [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'progress.txt'), [string]$Value) }
+$taskLock = [Threading.Mutex]::new($false, 'Global\GameGauge.ComponentRepair')
+$taskLocked = $false
 try {
+    try { $taskLocked = $taskLock.WaitOne(0) } catch [Threading.AbandonedMutexException] { $taskLocked = $true }
+    if (!$taskLocked) { throw '组件修复正在进行，请等待完成后再安装。' }
     Set-InstallProgress 5
     $taskPayload = Join-Path $PSScriptRoot 'payload'
     Expand-Archive -LiteralPath (Join-Path $PSScriptRoot 'payload.zip') -DestinationPath $taskPayload -Force
-    $taskDestination = Join-Path $env:ProgramFiles 'GameGauge'
+    $taskDestination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'GameGauge'
     $taskRelease = Get-Content -LiteralPath (Join-Path $taskPayload 'app/release.json') -Raw | ConvertFrom-Json
     # 安装目录固定，服务程序不从用户可写目录运行。
     New-Item -ItemType Directory -Path $taskDestination -Force | Out-Null
@@ -20,31 +24,11 @@ try {
     Set-InstallProgress 25
     Copy-Item -Path (Join-Path $taskPayload 'app/*') -Destination $taskDestination -Recurse -Force
     Set-InstallProgress 40
-    & (Join-Path $taskDestination 'scripts/install-presentmon.ps1') -MsiPath (Join-Path $taskPayload 'PresentMon-2.6.0.msi')
-    $taskPawn = Join-Path $taskPayload 'PawnIO_setup.exe'
-    if ((Get-FileHash -LiteralPath $taskPawn -Algorithm SHA256).Hash -ne '1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032') { throw 'PawnIO 安装器哈希不符' }
-    if ((Get-AuthenticodeSignature -LiteralPath $taskPawn).Status -ne 'Valid') { throw 'PawnIO 签名无效' }
-    if (!(Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO')) {
-        $taskProcess = Start-Process -FilePath $taskPawn -ArgumentList '-install -silent' -WindowStyle Hidden -PassThru -Wait
-        if ($taskProcess.ExitCode -ne 0) { throw "PawnIO 安装失败：$($taskProcess.ExitCode)" }
-    }
-    $taskCpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+    & (Join-Path $taskDestination 'scripts/repair-components.ps1')
+    if ($LASTEXITCODE -notin @(0, 3010)) { throw "采集组件安装失败：$LASTEXITCODE；详见 $taskDestination\component-repair.log" }
+    $taskRebootRequired = $LASTEXITCODE -eq 3010
+    if ($taskRebootRequired) { Write-Warning '采集组件需要重启 Windows 完成安装。' }
     Set-InstallProgress 60
-    if ($taskCpu.Manufacturer -eq 'AuthenticAMD') {
-        $taskServiceCommand = '"' + (Join-Path $taskDestination 'GameGauge.CpuProbe.exe') + '" --service'
-        if (!$taskSensor) { New-Service -Name 'GameGauge.Sensor' -BinaryPathName $taskServiceCommand -DisplayName 'GameGauge CPU Temperature' -StartupType Automatic | Out-Null }
-        else {
-            # 使用结构化参数，避免 Windows PowerShell 5.1 转发带空格路径时丢失引号。
-            $taskService = Get-CimInstance Win32_Service -Filter "Name='GameGauge.Sensor'"
-            $taskChange = Invoke-CimMethod -InputObject $taskService -MethodName Change -Arguments @{PathName=$taskServiceCommand;StartMode='Automatic'}
-            if ($taskChange.ReturnValue -ne 0) { throw "更新温度服务失败，Win32_Service.Change 返回 $($taskChange.ReturnValue)" }
-        }
-        $taskRecovery = & "$env:WINDIR/System32/sc.exe" failure GameGauge.Sensor reset= 86400 actions= restart/5000/restart/15000 2>&1
-        if ($LASTEXITCODE) { throw "设置温度服务恢复策略失败：$taskRecovery" }
-        $taskConfigured = Get-CimInstance Win32_Service -Filter "Name='GameGauge.Sensor'"
-        if ($taskConfigured.PathName -ne $taskServiceCommand -or $taskConfigured.StartMode -ne 'Auto') { throw '温度服务配置读回不一致' }
-        Start-Service 'GameGauge.Sensor'
-    }
     $taskShell = New-Object -ComObject WScript.Shell
     Set-InstallProgress 75
     $taskPrograms = [Environment]::GetFolderPath('CommonPrograms')
@@ -87,6 +71,7 @@ try {
     }
     Set-InstallProgress 100
     Stop-Transcript | Out-Null
+    if ($taskRebootRequired) { exit 3010 }
     exit 0
 } catch {
     Write-Output $_
@@ -94,4 +79,7 @@ try {
     if ($taskSensor) { Start-Service 'GameGauge.Sensor' -ErrorAction Continue }
     Stop-Transcript | Out-Null
     exit 1
+} finally {
+    if ($taskLocked) { $taskLock.ReleaseMutex() }
+    $taskLock.Dispose()
 }

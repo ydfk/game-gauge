@@ -1,4 +1,5 @@
 #include "common/config.h"
+#include "common/components.h"
 #include "common/platform.h"
 #include "metrics/sampler.h"
 #include "metrics/target.h"
@@ -24,6 +25,7 @@ int wmain(int argc, wchar_t** argv) {
             else if (argument == L"--sample-ms" && i + 1 < argc) duration = std::clamp(std::stoul(argv[++i]), 1000ul, 60000ul);
             else if (argument == L"--presentmon-probe" && i + 1 < argc) presentmon_pid = std::stoul(argv[++i]);
             else if (argument == L"--presentmon-capabilities") show_capabilities = true;
+            else if (argument == L"--components") { std::cout << gauge::inspect_components().dump(2) << '\n'; return 0; }
             else if (argument == L"--host-status") { std::cout << gauge::ipc_request({{"command", "status"}}).dump(2) << '\n'; return 0; }
             else if (argument == L"--request" && i + 1 < argc) { std::cout << gauge::ipc_request(gauge::Json::parse(gauge::utf8(argv[++i]))).dump(2) << '\n'; return 0; }
             else if (argument == L"--targets") {

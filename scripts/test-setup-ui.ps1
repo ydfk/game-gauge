@@ -6,7 +6,7 @@ if (Get-Process GameGauge.SetupPreview -ErrorAction SilentlyContinue) { throw '�
 $taskData = Join-Path $taskRoot ('build/runtime-test/setup-ui-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $taskData -Force | Out-Null
 foreach ($taskDpi in @(96,120,144)) {
-    foreach ($taskState in @('installing','success','failure')) {
+    foreach ($taskState in @('installing','success','failure','reboot')) {
         $taskImage = Join-Path $taskData "$taskState-$taskDpi.png"
         $taskProcess = Start-Process -FilePath $taskPreview -ArgumentList @('--snapshot',('"'+$taskImage+'"'),'--state',$taskState,'--progress','60','--dpi',$taskDpi,'--lock-close') -WindowStyle Hidden -PassThru -Wait
         if ($taskProcess.ExitCode -ne 0 -or !(Test-Path -LiteralPath $taskImage)) { throw "$taskState / DPI $taskDpi 渲染失败。" }
@@ -61,6 +61,11 @@ try {
     [SetupNative]::Click($taskHandle,660,450)
     if (!$taskProcess.WaitForExit(2000) -or $taskProcess.ExitCode -ne 0) { throw '完成按钮无效。' }
 
+    $taskProcess = Start-Process -FilePath $taskPreview -ArgumentList @('--state','reboot','--lock-close') -WindowStyle Hidden -PassThru
+    $taskHandle = Wait-PreviewWindow
+    [SetupNative]::Click($taskHandle,660,450)
+    if (!$taskProcess.WaitForExit(2000) -or $taskProcess.ExitCode -ne 3010) { throw '需要重启时完成按钮无效。' }
+
     $taskActionLog = Join-Path $taskData 'actions.txt'
     $taskProcess = Start-Process -FilePath $taskPreview -ArgumentList @('--state','installing','--lock-close','--action-log',('"'+$taskActionLog+'"')) -WindowStyle Hidden -PassThru
     $taskHandle = Wait-PreviewWindow
@@ -74,7 +79,7 @@ try {
     [SetupNative]::SendMessage($taskHandle,0x100,[IntPtr]9,[IntPtr]::Zero) | Out-Null
     [SetupNative]::SendMessage($taskHandle,0x100,[IntPtr]32,[IntPtr]::Zero) | Out-Null
     if (!$taskProcess.WaitForExit(2000) -or $taskProcess.ExitCode -ne 1) { throw '失败状态键盘关闭无效。' }
-    Write-Host "三种安装状态、100%/125%/150% DPI、安装中关闭保护、完成按钮、日志和键盘交互：通过。截图：$taskData"
+    Write-Host "四种安装状态、100%/125%/150% DPI、安装中关闭保护、完成按钮、日志和键盘交互：通过。截图：$taskData"
 } finally {
     if ($taskProcess -and !$taskProcess.HasExited) { Stop-Process -Id $taskProcess.Id -ErrorAction SilentlyContinue }
     [SetupNative]::SetThreadDpiAwarenessContext($taskPreviousDpi) | Out-Null

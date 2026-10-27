@@ -30,6 +30,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         window.progress(progress);
         if (state == L"success") window.complete(0);
         else if (state == L"failure") window.complete(1);
+        else if (state == L"reboot") window.complete(ERROR_SUCCESS_REBOOT_REQUIRED);
         if (!snapshot.empty()) { window.snapshot(snapshot, dpi); result = 0; }
         else result = window.run();
     } catch (...) { result = 1; }

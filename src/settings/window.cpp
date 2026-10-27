@@ -225,6 +225,17 @@ void SettingsWindow::paint() {
     if (!error_.empty()) {
         fill(D2D1::RectF(272, height - 39, width - 28, height - 7), tint(amber, .10f), 6);
         label(L"提示：" + wide(error_), 284, height - 35, width - 324, 24, small_.Get(), amber);
+    } else if (page_ != 4) {
+        const auto items = status_.value("components", Json::object()).value("items", Json::array());
+        const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {
+            const auto state = item.value("state", std::string{});
+            return state == "missing" || state == "stopped" || state == "error";
+        });
+        if (unhealthy) {
+            label(L"部分采集组件异常，可能影响帧率或温度", 284, height - 35, width - 490, 24, small_.Get(), amber);
+            row_action(L"检查采集组件", D2D1::RectF(width - 168, height - 39, width - 28, height - 7),
+                [this](float) { page_ = 4; focused_ = -1; refresh(); });
+        }
     }
     if (focused_ >= 0 && focused_ < static_cast<int>(hotspots_.size())) {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;

@@ -5,6 +5,7 @@
 #include "version.h"
 #include "host/ipc_server.h"
 #include <commdlg.h>
+#include <shellapi.h>
 #include <algorithm>
 #include <format>
 #include <ctime>
@@ -237,11 +238,35 @@ void SettingsWindow::updates_page(float width) {
     if (available) message = L"发现新版本 v" + wide(update.value("version", std::string{}));
     label(message, left + 16, 250, span - 16, 32, small_.Get(), status_ink);
     line(left, 309, right, 309, edge);
-    label(L"自动更新", left, 341, span, 28, heading_.Get(), white);
+    label(L"自动更新", left, 324, span, 28, heading_.Get(), white);
     toggle(L"检查新版本", L"每六小时检查一次", config_.check_updates,
-        D2D1::RectF(left, 388, right, 454), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
+        D2D1::RectF(left, 362, right, 420), [this](float) { config_.check_updates = !config_.check_updates; if (!config_.check_updates) config_.auto_update = false; apply(); });
     toggle(L"下载并安装", L"游戏退出后安装", config_.auto_update,
-        D2D1::RectF(left, 464, right, 530), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
+        D2D1::RectF(left, 424, right, 482), [this](float) { config_.auto_update = !config_.auto_update; if (config_.auto_update) config_.check_updates = true; apply(); });
+    const auto components = status_.value("components", Json::object());
+    const auto repair_state = components.value("repair_state", std::string{});
+    const bool repairing = repair_state == "running";
+    line(left, 500, right, 500, edge);
+    label(L"采集组件", left, 512, 170, 32, heading_.Get(), white);
+    const auto repair = D2D1::RectF(right - 124, 510, right, 546);
+    if (repairing || !components.value("can_repair", false)) {
+        fill(repair, panel, 6); text(repairing ? L"修复中…" : L"需要完整安装包", repair, button_format_.Get(), muted);
+    } else button(L"修复采集组件", repair, [this](float) { command("repair_components"); });
+    const auto log = executable_dir() / L"component-repair.log";
+    if (std::filesystem::is_regular_file(log)) row_action(L"修复日志", D2D1::RectF(right - 218, 511, right - 136, 545),
+        [this, log](float) { ShellExecuteW(window_, L"open", log.c_str(), nullptr, nullptr, SW_SHOWNORMAL); });
+    float y = 551;
+    for (const auto& item : components.value("items", Json::array())) {
+        const auto component_state = item.value("state", std::string{});
+        label(wide(item.value("name", std::string{})), left, y, 132, 28, body_.Get(), white);
+        label(wide(item.value("detail", std::string{})), left + 144, y, span - 144, 28, small_.Get(),
+            component_state == "ready" ? mint : component_state == "unsupported" ? muted : amber);
+        y += 31;
+    }
+    auto component_message = components.value("message", std::string{});
+    if (component_message.empty()) component_message = components.value("can_repair", false) ?
+        "持续检查 · 离线修复需要管理员授权" : "安装新版完整安装包后，可在这里离线修复组件";
+    label(wide(component_message), left, 651, span, 28, small_.Get(), repair_state == "error" || repair_state == "reboot" ? amber : muted);
 }
 void SettingsWindow::history_exclusion_action(const Json& record, D2D1_RECT_F rect) {
     auto path = record.value("path", std::string{});
