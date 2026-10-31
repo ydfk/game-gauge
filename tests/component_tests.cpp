@@ -34,6 +34,8 @@ void component_contracts() {
     require(gauge::component_readings(components, snapshot)[0]["state"] == "error", "game with broken stream exposes error");
     snapshot.fps = gauge::missing(gauge::State::waiting, "PresentMon 服务不可用，状态 12");
     require(gauge::component_readings(components, snapshot)[0]["state"] == "error", "connection failures must not remain a silent waiting state");
+    snapshot.fps = gauge::missing(gauge::State::waiting, "帧事件无有效样本 · 已自动重连 1 次");
+    require(gauge::component_readings(components, snapshot)[0]["state"] == "error", "unusable raw frames must surface as an error");
     snapshot.target.foreground = false;
     require(gauge::component_readings(components, snapshot)[0]["state"] == "ready", "background game does not trigger false alarm");
     snapshot.hardware.cpu_vendor = "GenuineIntel";

@@ -103,7 +103,7 @@ Json component_readings(Json components, const Snapshot& snapshot) {
         } else {
             const bool known_failure = metric.reason.find("不可用") != std::string::npos || metric.reason.find("失败") != std::string::npos ||
                 metric.reason.find("断开") != std::string::npos || metric.reason.find("异常") != std::string::npos ||
-                metric.reason.find("无数据") != std::string::npos || metric.reason.find("缺少") != std::string::npos;
+                metric.reason.find("无数据") != std::string::npos || metric.reason.find("无有效样本") != std::string::npos || metric.reason.find("缺少") != std::string::npos;
             item["state"] = metric.state == State::waiting && !known_failure ? "waiting" : "error";
             item["detail"] = metric.reason.empty() ? "服务运行中，尚无有效读数" : metric.reason;
         }

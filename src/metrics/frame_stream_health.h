@@ -3,10 +3,14 @@
 #include <cstdint>
 
 namespace gauge {
+struct FrameBatchProgress {
+    uint32_t raw_frames{};
+    uint32_t accepted_frames{};
+};
 class FrameStreamHealth {
 public:
-    bool reconnect_due(uint64_t now, bool foreground, bool received_frames) {
-        if (received_frames) { reset(); last_progress_ = now; return false; }
+    bool reconnect_due(uint64_t now, bool foreground, FrameBatchProgress progress) {
+        if (progress.accepted_frames) { reset(); last_progress_ = now; return false; }
         if (!foreground || !last_progress_) { last_progress_ = now; return false; }
         const uint64_t timeout = std::min(uint64_t{60000}, uint64_t{10000} << std::min(retries_, 3u));
         if (now - last_progress_ < timeout) return false;

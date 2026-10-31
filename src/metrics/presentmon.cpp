@@ -40,7 +40,7 @@ struct PresentMonProvider::Impl {
     uint32_t frame_bytes{}, pid{};
     uint64_t started{}, retry_at{}, raw_frames{}, accepted_frames{};
     uint64_t active_since{};
-    bool collecting{};
+    bool collecting{}, unusable_frames{};
     FrameStreamHealth health;
     std::string message{"PresentMon 服务尚未连接"};
     PM_QUERY_ELEMENT frame_elements[3]{{PM_METRIC_SWAP_CHAIN_ADDRESS, PM_STAT_NONE},
@@ -174,16 +174,17 @@ std::vector<PresentMonCapability> PresentMonProvider::capabilities() {
     impl_->connect();
     return impl_->capability_list;
 }
-void PresentMonProvider::reset() { impl_->disconnect(); impl_->retry_at = 0; impl_->health.reset(); }
+void PresentMonProvider::reset() { impl_->disconnect(); impl_->retry_at = 0; impl_->health.reset(); impl_->unusable_frames = false; }
 void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameStatistics& statistics, bool collect_frames) {
     if (!target.pid) {
         if (impl_->pid) { impl_->disconnect(); statistics.reset(); }
         impl_->message = "等待游戏目标 · 帧采集按需连接";
-        impl_->health.reset();
+        impl_->health.reset(); impl_->unusable_frames = false;
         return;
     }
     if (!impl_->connect()) return;
     if (impl_->pid != target.pid || impl_->started != target.started) {
+        if (impl_->pid && impl_->pid != target.pid) impl_->unusable_frames = false;
         if (impl_->pid) impl_->stop(impl_->session, impl_->pid);
         if (impl_->frames) impl_->free_frames(impl_->frames);
         impl_->frames = nullptr;
@@ -216,6 +217,7 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
     LARGE_INTEGER frequency{}; QueryPerformanceFrequency(&frequency);
     LARGE_INTEGER qpc{}; QueryPerformanceCounter(&qpc);
     const auto now = GetTickCount64();
+    uint32_t accepted_this_poll{};
     for (uint32_t i = 0; i < count; ++i) {
         const auto* frame = frames.data() + static_cast<size_t>(i) * impl_->frame_bytes;
         uint64_t chain{}, timestamp{}; double ms{};
@@ -224,18 +226,23 @@ void PresentMonProvider::poll(const Target& target, Snapshot& snapshot, FrameSta
         memcpy(&ms, frame + impl_->frame_elements[2].dataOffset, sizeof(ms));
         const auto age = timestamp <= static_cast<uint64_t>(qpc.QuadPart) ? (static_cast<uint64_t>(qpc.QuadPart) - timestamp) * 1000 / frequency.QuadPart : 0;
         if (collect_frames && frame_inside_active_period(timestamp, impl_->active_since, ms, static_cast<uint64_t>(frequency.QuadPart)) && timestamp <= static_cast<uint64_t>(qpc.QuadPart) &&
-            age < now && age < 60000) { statistics.add(now - age, chain, ms); ++impl_->accepted_frames; }
+            age < now && age < 60000) { statistics.add(now - age, chain, ms); ++impl_->accepted_frames; ++accepted_this_poll; }
     }
     impl_->raw_frames += count;
+    if (collect_frames) {
+        if (accepted_this_poll) impl_->unusable_frames = false;
+        else if (count) impl_->unusable_frames = true;
+    }
     impl_->poll_telemetry(snapshot);
     // 长时间无帧时重建订阅，指数退避避免暂停画面触发频繁重连。
-    if (impl_->health.reconnect_due(now, collect_frames, count > 0)) {
+    if (impl_->health.reconnect_due(now, collect_frames, {count, accepted_this_poll})) {
         impl_->disconnect(); impl_->retry_at = now + 1000;
-        impl_->message = "帧采集未返回数据 · 正在重新连接";
+        impl_->message = impl_->unusable_frames ? "帧事件无有效样本 · 正在重新连接" : "帧采集未返回数据 · 正在重新连接";
         return;
     }
     if (impl_->health.retries()) {
-        impl_->message = "帧采集无数据 · 已自动重连 " + std::to_string(impl_->health.retries()) + " 次";
+        impl_->message = (impl_->unusable_frames ? "帧事件无有效样本 · 已自动重连 " : "帧采集无数据 · 已自动重连 ") +
+            std::to_string(impl_->health.retries()) + " 次";
         return;
     }
     impl_->message = std::format("PresentMon 已连接 · 原始帧 {} · 有效帧 {}", impl_->raw_frames, impl_->accepted_frames);

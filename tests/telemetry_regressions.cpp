@@ -12,14 +12,14 @@ void close(double value, double expected, const char* message) { require(std::ab
 }
 void telemetry_regressions() {
     gauge::FrameStreamHealth health;
-    require(!health.reconnect_due(1000, true, false), "stream startup needs a grace period");
-    require(!health.reconnect_due(10999, true, false), "short gaps must not reconnect");
-    require(health.reconnect_due(11000, true, false), "stalled stream must reconnect");
-    require(!health.reconnect_due(21000, true, false), "repeated failures must back off");
-    require(health.reconnect_due(31000, true, false), "backoff must eventually retry");
-    require(!health.reconnect_due(100000, false, false), "background game must not trigger reconnect");
-    require(!health.reconnect_due(101000, true, true) && health.retries() == 0, "healthy frames clear failure state");
-    require(health.reconnect_due(111000, true, false), "recovered stream uses initial timeout");
+    require(!health.reconnect_due(1000, true, {0, 0}), "stream startup needs a grace period");
+    require(!health.reconnect_due(10999, true, {20, 0}), "unusable frames must not reset the startup timer");
+    require(health.reconnect_due(11000, true, {20, 0}), "raw frames without valid samples must reconnect");
+    require(!health.reconnect_due(21000, true, {0, 0}), "repeated failures must back off");
+    require(health.reconnect_due(31000, true, {0, 0}), "backoff must eventually retry");
+    require(!health.reconnect_due(100000, false, {10, 0}), "background game must not trigger reconnect");
+    require(!health.reconnect_due(101000, true, {10, 1}) && health.retries() == 0, "healthy frames clear failure state");
+    require(health.reconnect_due(111000, true, {0, 0}), "recovered stream uses initial timeout");
     require(!gauge::valid_recorded_value("fps", 0), "zero FPS must be excluded from records");
     require(gauge::valid_recorded_value("fps", 1), "real low FPS must remain visible");
     require(gauge::valid_recorded_value("gpu_load", 0), "idle GPU load is valid");
