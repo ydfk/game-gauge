@@ -25,7 +25,7 @@ int wmain(int argc, wchar_t** argv) {
         target->BeginDraw(); target->Clear(D2D1::ColorF(0x33465B));
         if (argc == 3) {
             target->SetTransform(D2D1::Matrix3x2F::Translation(152, 95));
-            gauge::draw_pause_notice(target.Get(), write.Get(), 720, 210, true);
+            gauge::draw_pause_notice(target.Get(), write.Get(), 720, 210, L"点击或 Ctrl+Shift+F10 关闭本次提醒");
         } else {
         float y = 25;
         size_t row{};

@@ -118,6 +118,7 @@ void SettingsWindow::navigation(float width, float height) {
         }
         label(names[i], 74, y + 11, 130, 24, body_.Get(), page_ == i ? white : muted);
         add(D2D1::RectF(16, y, 220, y + 48), [this, i](float) {
+            recording_notice_hotkey_ = false; notice_hotkey_message_.clear();
             page_ = i; focused_ = -1; if (page_ == 3) refresh(); InvalidateRect(window_, nullptr, FALSE);
         });
     }
@@ -125,7 +126,7 @@ void SettingsWindow::navigation(float width, float height) {
     const auto version_rect = D2D1::RectF(24, height - 69, 132, height - 31);
     if (hovered(version_rect)) fill(version_rect, panel, 6);
     label(L"v" + wide(GAMEGAUGE_VERSION) + L"  ›", 32, height - 62, 95, 24, small_.Get(), hovered(version_rect) ? blue : muted);
-    add(version_rect, [this](float) { page_ = 4; focused_ = -1; refresh(); });
+    add(version_rect, [this](float) { recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); page_ = 4; focused_ = -1; refresh(); });
     row_action(quitting_ ? L"退出中…" : L"退出", D2D1::RectF(152, height - 69, 212, height - 31),
         [this](float) { quit_program(); });
     fill(D2D1::RectF(236, 0, width, height), background);

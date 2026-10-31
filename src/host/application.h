@@ -40,6 +40,7 @@ private:
     std::unique_ptr<IpcServer> ipc_;
     std::atomic<bool> capture_requested_{};
     std::atomic<DWORD> capture_error_{};
+    std::atomic<NoticeHotkeyState> notice_hotkey_state_{NoticeHotkeyState::inactive};
     std::string hud_error_, warning_;
     uint64_t component_issue_since_{};
     bool component_notified_{};

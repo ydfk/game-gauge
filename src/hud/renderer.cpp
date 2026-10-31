@@ -141,7 +141,7 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     }
     check(context_->EndDraw()); check(swap_->Present(1, 0));
 }
-void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height, bool hotkey) {
+void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height, const std::wstring& hint) {
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     check(target->CreateSolidColorBrush(D2D1::ColorF(0x080808, .93f), &brush));
     target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 14, 14), brush.Get());
@@ -156,13 +156,13 @@ void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float w
         target->DrawTextW(text, static_cast<UINT32>(wcslen(text)), format.Get(), D2D1::RectF(12, top, width - 12, bottom), brush.Get());
     };
     draw(L"OBS 录屏暂停", std::min(48.f, width / 11), height * .15f, height * .62f, 0xFF4040);
-    draw(hotkey ? L"关闭本次提醒 · Ctrl+Shift+F10" : L"点击关闭本次提醒", std::min(16.f, width / 26), height * .65f, height * .93f, 0xE2E6EB);
+    draw(hint.c_str(), std::min(16.f, width / 26), height * .65f, height * .93f, 0xE2E6EB);
 }
-void Renderer::render_notice(UINT dpi, SIZE size, bool hotkey) {
+void Renderer::render_notice(UINT dpi, SIZE size, const std::wstring& hint) {
     resize(size.cx, size.cy); context_->SetDpi(static_cast<float>(dpi), static_cast<float>(dpi));
     const float width = size.cx * 96.f / dpi, height = size.cy * 96.f / dpi;
     context_->BeginDraw(); context_->Clear(D2D1::ColorF(0, 0, 0, 0));
-    draw_pause_notice(context_.Get(), write_.Get(), width, height, hotkey);
+    draw_pause_notice(context_.Get(), write_.Get(), width, height, hint);
     check(context_->EndDraw()); check(swap_->Present(1, 0));
 }
 }

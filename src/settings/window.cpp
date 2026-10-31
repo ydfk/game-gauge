@@ -129,6 +129,24 @@ void SettingsWindow::command(const char* action) {
     try { ipc_request({{"command", action}}); refresh(); }
     catch (const std::exception& e) { error_ = e.what(); InvalidateRect(window_, nullptr, FALSE); }
 }
+void SettingsWindow::record_notice_hotkey(UINT key) {
+    if (key == VK_ESCAPE) { recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); return; }
+    if (key == VK_CONTROL || key == VK_SHIFT || key == VK_MENU || key == VK_LWIN || key == VK_RWIN) return;
+    NoticeHotkey candidate{0, key};
+    if (GetKeyState(VK_CONTROL) < 0) candidate.modifiers |= MOD_CONTROL;
+    if (GetKeyState(VK_MENU) < 0) candidate.modifiers |= MOD_ALT;
+    if (GetKeyState(VK_SHIFT) < 0) candidate.modifiers |= MOD_SHIFT;
+    if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0 || !valid_notice_hotkey(candidate)) {
+        notice_hotkey_message_ = L"请用 Ctrl、Alt 或 Shift 加字母、数字或 F 键"; return;
+    }
+    if (!(candidate == config_.obs_pause_hotkey)) {
+        if (!RegisterHotKey(window_, 3100, candidate.modifiers | MOD_NOREPEAT, candidate.key)) {
+            notice_hotkey_message_ = L"组合键已被占用，请更换"; return;
+        }
+        UnregisterHotKey(window_, 3100);
+    }
+    config_.obs_pause_hotkey = candidate; recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); apply();
+}
 void SettingsWindow::start_cpu_sensor() {
     try {
         const auto host_pid = status_.at("host_pid").get<DWORD>();
@@ -287,7 +305,15 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             InvalidateRect(window_, nullptr, FALSE); return 0;
         }
         case WM_TIMER: refresh(); return 0;
+        case WM_KILLFOCUS:
+            if (recording_notice_hotkey_) { recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); InvalidateRect(window_, nullptr, FALSE); }
+            break;
+        case WM_SYSKEYDOWN:
         case WM_KEYDOWN:
+            if (recording_notice_hotkey_) {
+                record_notice_hotkey(static_cast<UINT>(wparam)); InvalidateRect(window_, nullptr, FALSE); return 0;
+            }
+            if (message == WM_SYSKEYDOWN) break;
             if (wparam == VK_TAB && !hotspots_.empty()) {
                 const auto size = static_cast<int>(hotspots_.size());
                 focused_ = (focused_ + (GetKeyState(VK_SHIFT) < 0 ? size - 1 : 1) + size) % size;

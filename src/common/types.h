@@ -1,4 +1,5 @@
 #pragma once
+#include "hotkey.h"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -74,6 +75,7 @@ struct Snapshot {
 struct Config {
     bool show_obs{};
     bool obs_pause_notice{};
+    NoticeHotkey obs_pause_hotkey{};
     bool check_updates{true};
     bool auto_update{};
     bool enabled{true};
