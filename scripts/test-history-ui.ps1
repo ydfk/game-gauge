@@ -22,6 +22,7 @@ $taskRecord = @{version=1;id=$taskId;game='视觉验收样本.exe';started_ms=$t
 [IO.File]::WriteAllText("$taskData/history/$taskId.json", ($taskRecord | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
 foreach ($taskDayOffset in 1..6) {
     $taskOlder = $taskRecord.Clone(); $taskOlderStart = $taskStart - [uint64]($taskDayOffset * 86400000)
+    if ($taskDayOffset % 2) { $taskOlder.game = '第二个游戏.exe'; $taskOlder.display_name = '第二个游戏' }
     $taskOlder.id = "$taskOlderStart-777"; $taskOlder.started_ms = $taskOlderStart; $taskOlder.updated_ms = $taskOlderStart + 1800000
     [IO.File]::WriteAllText("$taskData/history/$($taskOlder.id).json", ($taskOlder | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
 }
@@ -34,6 +35,13 @@ try {
     $taskFilter = @{command='history';day=$taskDay} | ConvertTo-Json -Compress
     $taskFiltered = & "$taskBin/GameGauge.Diagnostics.exe" --request $taskFilter | ConvertFrom-Json
     if (!$taskFiltered.ok -or $taskFiltered.total -ne 1 -or $taskFiltered.active_seconds -ne 1785) { throw '按日期筛选或时长汇总失败' }
+    if ($taskList.games.'第二个游戏.exe' -ne '第二个游戏' -or $taskList.games.($taskRecord.game) -ne $taskRecord.game) { throw '游戏筛选缺少跨页选项或旧记录' }
+    $taskGameQuery = @{command='history';game='第二个游戏.exe';offset=1;limit=1}
+    $taskGamePage = & "$taskBin/GameGauge.Diagnostics.exe" --request ($taskGameQuery | ConvertTo-Json -Compress) | ConvertFrom-Json
+    if ($taskGamePage.total -ne 3 -or $taskGamePage.active_seconds -ne (3 * 1785) -or $taskGamePage.history.Count -ne 1 -or $taskGamePage.history[0].game -ne $taskGameQuery.game) { throw '按游戏筛选、汇总或分页失败' }
+    $taskGameQuery.day = $taskDay
+    $taskEmpty = & "$taskBin/GameGauge.Diagnostics.exe" --request ($taskGameQuery | ConvertTo-Json -Compress) | ConvertFrom-Json
+    if ($taskEmpty.total -ne 0 -or $taskEmpty.active_seconds -ne 0 -or $taskEmpty.history.Count) { throw '游戏与日期组合筛选失败' }
     if ($taskList.history[0].PSObject.Properties['series']) { throw '历史列表携带过大曲线数据' }
     $taskRequest = @{command='history_detail';id=$taskId} | ConvertTo-Json -Compress
     $taskDetail = & "$taskBin/GameGauge.Diagnostics.exe" --request $taskRequest | ConvertFrom-Json

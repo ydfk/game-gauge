@@ -156,22 +156,7 @@ Json Application::request(const Json& command) {
         filter_history_view(record);
         return {{"ok", true}, {"record", std::move(record)}};
     }
-    if (action == "history") {
-        auto all = read_history(data_dir() / L"history", false);
-        for (auto& record : all) filter_history_view(record);
-        Json rows = Json::array(), dates = Json::array(); double active_seconds{};
-        const auto day = command.value("day", std::string{});
-        for (const auto& row : all) {
-            const auto date = history_day(row.value("started_ms", 0ull));
-            if (std::find(dates.begin(), dates.end(), Json(date)) == dates.end()) dates.push_back(date);
-            if (day.empty() || date == day) { rows.push_back(row); active_seconds += row.value("active_seconds", 0.0); }
-        }
-        const auto offset = std::min(command.value("offset", size_t{}), rows.size());
-        const auto count = std::clamp(command.value("limit", size_t{4}), size_t{1}, size_t{32});
-        Json page = Json::array();
-        for (size_t i = offset; i < std::min(rows.size(), offset + count); ++i) page.push_back(rows[i]);
-        return {{"ok", true}, {"total", rows.size()}, {"active_seconds", active_seconds}, {"dates", dates}, {"history", page}};
-    }
+    if (action == "history") return query_history(data_dir() / L"history", command);
     if (action == "reset") sampler_.reset_statistics();
     else if (action == "rediscover") sampler_.refresh_hardware();
     else if (action == "settings") PostMessageW(window_, action_message, open_settings, 0);

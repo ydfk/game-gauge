@@ -14,6 +14,12 @@ namespace gauge {
 namespace {
 std::recursive_mutex history_mutex;
 std::set<std::filesystem::path> deleted_sessions;
+struct CachedSummary {
+    std::filesystem::file_time_type modified;
+    uintmax_t size;
+    Json row;
+};
+std::map<std::filesystem::path, CachedSummary> summaries;
 }
 bool delete_history(const std::filesystem::path& directory, const std::string& id) {
     if (id.empty() || id.size() > 64 || id.find_first_not_of("0123456789-") != std::string::npos)
@@ -22,6 +28,7 @@ bool delete_history(const std::filesystem::path& directory, const std::string& i
     const auto path = directory / (wide(id) + L".json");
     const bool removed = std::filesystem::remove(path);
     // 删除当前会话后，本次运行不再写回同一条记录。
+    summaries.erase(path);
     deleted_sessions.insert(path);
     return removed;
 }
@@ -49,19 +56,55 @@ Json read_history(const std::filesystem::path& directory, bool details) {
     std::vector<Json> rows;
     if (!std::filesystem::exists(directory)) return Json::array();
     for (const auto& file : std::filesystem::directory_iterator(directory)) {
-        if (file.path().extension() != L".json" || !file.is_regular_file() || file.file_size() > 1048576) continue;
         try {
+            if (file.path().extension() != L".json" || !file.is_regular_file()) continue;
+            const auto size = file.file_size();
+            if (size > 1048576) continue;
+            const auto modified = file.last_write_time();
+            const auto cached = summaries.find(file.path());
+            if (!details && cached != summaries.end() && cached->second.modified == modified && cached->second.size == size) {
+                rows.push_back(cached->second.row);
+                continue;
+            }
             std::ifstream stream(file.path()); auto row = Json::parse(stream);
             if (!row.is_object() || row.value("version", 0) != 1) continue;
             const auto id = row.value("id", std::string{});
             if (id.empty() || id.size() > 64 || id.find_first_not_of("0123456789-") != std::string::npos) continue;
             if (!row.value("started_ms", Json{}).is_number_unsigned()) continue;
-            if (!details) { row.erase("series"); row.erase("events"); row.erase("hardware"); }
+            if (!details) {
+                row.erase("series"); row.erase("events"); row.erase("hardware");
+                summaries.insert_or_assign(file.path(), CachedSummary{modified, size, row});
+            }
             rows.push_back(std::move(row));
         } catch (...) { /* 单条损坏不影响其他历史记录。 */ }
     }
     std::sort(rows.begin(), rows.end(), [](const Json& a, const Json& b) { return a.value("started_ms", 0ull) > b.value("started_ms", 0ull); });
     return rows;
+}
+Json query_history(const std::filesystem::path& directory, const Json& command) {
+    auto all = read_history(directory, false);
+    const auto compare_exe = [](const std::string& a, const std::string& b) { return _stricmp(a.c_str(), b.c_str()) < 0; };
+    std::map<std::string, std::string, decltype(compare_exe)> games;
+    const auto game = command.value("game", std::string{});
+    Json page = Json::array(), dates = Json::array();
+    size_t total{};
+    double active_seconds{};
+    const auto offset = command.value("offset", size_t{});
+    const auto count = std::clamp(command.value("limit", size_t{4}), size_t{1}, size_t{32});
+    const auto day = command.value("day", std::string{});
+    for (const auto& row : all) {
+        const auto date = history_day(row.value("started_ms", 0ull));
+        const auto exe = row.value("game", std::string{});
+        if (!exe.empty()) games.try_emplace(exe, row.value("display_name", exe));
+        if (dates.empty() || dates.back() != date) dates.push_back(date);
+        if ((!day.empty() && date != day) || (!game.empty() && _stricmp(game.c_str(), exe.c_str()) != 0)) continue;
+        active_seconds += row.value("active_seconds", 0.0);
+        if (total++ >= offset && page.size() < count) {
+            page.push_back(row);
+            filter_history_view(page.back());
+        }
+    }
+    return {{"ok", true}, {"total", total}, {"active_seconds", active_seconds}, {"dates", dates}, {"games", games}, {"history", std::move(page)}};
 }
 SessionHistory::SessionHistory(std::filesystem::path directory) : directory_(std::move(directory)) {
     // 上次进程异常退出时，保留已有采样并显式标记中断。
@@ -90,6 +133,7 @@ void SessionHistory::save(Entry& entry, uint64_t wall_ms, const char* status) {
       output << entry.data.dump(2); output.flush(); if (!output) throw std::runtime_error("无法保存游戏历史"); }
     if (!MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         throw std::runtime_error(error_text(GetLastError()));
+    summaries.erase(path);
     entry.saved_at = wall_ms;
 }
 void SessionHistory::update(const Snapshot& s, uint64_t wall_ms, const std::function<bool(const Target&)>& alive) {

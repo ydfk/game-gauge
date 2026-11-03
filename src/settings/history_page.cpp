@@ -47,6 +47,69 @@ std::wstring status_text(const Json& row) {
     return status == "running" ? L"进行中" : status == "interrupted" ? L"意外中断" : status == "monitor_closed" ? L"监控已关闭" : L"已结束";
 }
 }
+Json SettingsWindow::history_query() const {
+    if (!history_selected_.empty()) return {{"command", "history_detail"}, {"id", history_selected_}};
+    return {{"command", "history"}, {"offset", history_page_index_ * 6}, {"limit", 6}, {"day", history_day_}, {"game", history_game_}};
+}
+void SettingsWindow::request_history(bool synchronous) {
+    if (fixture_mode_ || history_request_.valid()) return;
+    pending_history_query_ = history_query();
+    const bool cached_detail = !history_selected_.empty() && displayed_history_query_ == pending_history_query_ &&
+        history_detail_.value("status", std::string{}) != "running";
+    history_request_ = std::async(std::launch::async, [query = pending_history_query_, cached_detail] {
+        Json response = cached_detail ? Json::object() : ipc_request(query);
+        if (!cached_detail && !response.value("ok", false)) throw std::runtime_error(response.value("error", std::string("读取历史失败")));
+        response["host_status"] = ipc_request({{"command", "status"}});
+        return response;
+    });
+    if (synchronous) { history_request_.wait(); finish_history(); }
+    else SetTimer(window_, 2, 20, nullptr);
+}
+void SettingsWindow::finish_history() {
+    if (!history_request_.valid() || history_request_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    KillTimer(window_, 2);
+    const bool current = page_ == 3 && pending_history_query_ == history_query();
+    try {
+        auto response = history_request_.get();
+        if (current) {
+            status_ = std::move(response.at("host_status"));
+            config_ = config_from_json(status_.at("config"));
+            if (history_selected_.empty()) {
+                history_ = std::move(response.at("history"));
+                history_games_ = response.value("games", Json::object());
+                history_dates_ = std::move(response.at("dates"));
+                history_count_ = response.at("total").get<size_t>();
+                history_seconds_ = response.at("active_seconds").get<double>();
+                history_page_index_ = std::min(history_page_index_, (std::max(size_t{1}, history_count_) - 1) / 6);
+            } else if (response.contains("record")) history_detail_ = std::move(response.at("record"));
+            displayed_history_query_ = pending_history_query_;
+            error_.clear();
+        }
+    } catch (const std::exception& e) { if (current) error_ = e.what(); }
+    if (page_ == 3 && pending_history_query_ != history_query()) request_history();
+    InvalidateRect(window_, nullptr, FALSE);
+}
+void SettingsWindow::choose_history_game(D2D1_RECT_F rect) {
+    const auto games = history_games_;
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    AppendMenuW(menu, MF_STRING | (history_game_.empty() ? MF_CHECKED : 0), 1, L"全部游戏");
+    UINT id = 2;
+    for (const auto& [exe, title] : games.items()) {
+        auto name = title.get<std::string>();
+        auto label = wide(name.empty() || name == exe ? exe : name + " (" + exe + ")");
+        for (size_t pos = 0; (pos = label.find(L'&', pos)) != std::wstring::npos; pos += 2) label.insert(pos, 1, L'&');
+        AppendMenuW(menu, MF_STRING | (exe == history_game_ ? MF_CHECKED : 0), id++, label.c_str());
+    }
+    POINT anchor{static_cast<LONG>(rect.left * scale_), static_cast<LONG>(rect.bottom * scale_)};
+    ClientToScreen(window_, &anchor);
+    const auto choice = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, anchor.x, anchor.y, 0, window_, nullptr);
+    DestroyMenu(menu);
+    if (!choice) return;
+    history_game_ = choice == 1 ? std::string{} : std::next(games.begin(), choice - 2).key();
+    history_page_index_ = 0;
+    request_history();
+}
 void SettingsWindow::export_history(const Json& record) {
     try {
         Json full = record;
@@ -66,8 +129,12 @@ void SettingsWindow::export_history(const Json& record) {
 void SettingsWindow::history_page(float width) {
     if (!history_selected_.empty()) { history_detail(width); return; }
     const float left = 272, right = width - 28, span = right - left;
-    label(history_day_.empty() ? L"全部游戏记录" : wide(history_day_), left, 146, 250, 30, heading_.Get(), white);
-    label(std::format(L"{} 次游戏  ·  游玩 {}", history_count_, duration(history_seconds_)), left + 265, 146, span - 265, 30, body_.Get(), mint);
+    const bool loaded = fixture_mode_ || displayed_history_query_ == history_query();
+    const auto filter = D2D1::RectF(right - 210, 143, right, 178);
+    button(history_game_.empty() ? L"全部游戏 ▾" : wide(history_games_.value(history_game_, history_game_)) + L" ▾",
+        filter, [this, filter](float) { choose_history_game(filter); }, !history_game_.empty());
+    label(history_day_.empty() ? L"游戏记录" : wide(history_day_), left, 146, 155, 30, heading_.Get(), white);
+    if (loaded) label(std::format(L"{} 次游戏  ·  游玩 {}", history_count_, duration(history_seconds_)), left + 160, 146, span - 382, 30, body_.Get(), mint);
     button(L"全部", D2D1::RectF(left, 191, left + 65, 226), [this](float) { history_day_.clear(); history_page_index_ = 0; refresh(); }, history_day_.empty());
     const auto date_pages = std::max(size_t{1}, (history_dates_.size() + 4) / 5);
     history_date_page_ = std::min(history_date_page_, date_pages - 1);
@@ -77,6 +144,10 @@ void SettingsWindow::history_page(float width) {
         button(wide(day), D2D1::RectF(x, 191, x + date_width, 226), [this, day](float) { history_day_ = day; history_page_index_ = 0; refresh(); }, history_day_ == day);
     }
     page_buttons(right, 194, history_date_page_, date_pages);
+    if (!loaded) {
+        label(error_.empty() ? L"正在读取游戏记录…" : L"暂时无法读取游戏记录", left, 335, span, 36, heading_.Get(), muted);
+        return;
+    }
     const float table_bottom = 290 + std::max(1.f, static_cast<float>(history_.size())) * 70 + 8;
     fill(D2D1::RectF(left, 244, right, history_.empty() ? 440 : table_bottom), panel, 10);
     label(L"游戏", left + 16, 250, span * .35f, 28, small_.Get(), muted);
@@ -96,8 +167,16 @@ void SettingsWindow::history_page(float width) {
             history_selected_ = id; history_tab_ = 0; history_metric_ = 0; refresh();
         }, true);
         row_action(L"导出", D2D1::RectF(right - 86, y + 3, right - 10, y + 33), [this, row](float) { export_history(row); });
-        row_action(L"删除", D2D1::RectF(right - 86, y + 35, right - 10, y + 65), [this, id = row.at("id").get<std::string>()](float) {
-            try { ipc_request({{"command", "delete_history"}, {"id", id}}); history_page_index_ = 0; refresh(); }
+        row_action(L"删除", D2D1::RectF(right - 86, y + 35, right - 10, y + 65), [this, id = row.at("id").get<std::string>(),
+            name = wide(row.value("display_name", row.value("game", std::string{}))), started = time_text(row.value("started_ms", 0ull))](float) {
+            const auto prompt = std::format(L"删除“{}”在 {} 开始的这条游戏记录？\n\n删除后无法恢复。", name, started);
+            if (MessageBoxW(window_, prompt.c_str(), L"删除游戏记录", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) return;
+            try {
+                const auto result = ipc_request({{"command", "delete_history"}, {"id", id}});
+                if (!result.value("ok", false)) throw std::runtime_error(result.value("error", std::string("删除失败")));
+                displayed_history_query_ = nullptr; pending_history_query_ = nullptr;
+                request_history();
+            }
             catch (const std::exception& e) { error_ = e.what(); }
         });
         history_exclusion_action(row, D2D1::RectF(right - 170, y + 35, right - 94, y + 65));
@@ -106,10 +185,9 @@ void SettingsWindow::history_page(float width) {
     }
     if (history_.empty()) {
         label(L"还没有游戏记录", left, 335, span, 36, heading_.Get(), white);
-        label(L"游戏结束后，记录会显示在这里。", left, 379, span, 28, body_.Get(), muted);
+        label(history_game_.empty() && history_day_.empty() ? L"游戏结束后，记录会显示在这里。" : L"当前筛选下没有记录，可以切换游戏或日期。", left, 379, span, 28, body_.Get(), muted);
     }
     const auto pages = std::max(size_t{1}, (history_count_ + 5) / 6);
-    if (history_page_index_ >= pages) { history_page_index_ = pages - 1; refresh(); }
     page_buttons(right, 728, history_page_index_, pages, true);
     const auto error = status_.value("snapshot", Json::object()).value("history_error", std::string{});
     if (!error.empty()) label(L"历史保存失败：" + wide(error), left, 765, span, 25, small_.Get(), amber);
@@ -123,7 +201,8 @@ void SettingsWindow::history_chart(const Json& row, const std::string& metric, D
         L"   平均 " + reading(stat.value("average", Json{}), column->unit), rect.left + 170, rect.top, rect.right - rect.left - 170, 24, small_.Get(), muted);
     const auto ids = row.value("series_metrics", Json::array());
     const auto found = std::find(ids.begin(), ids.end(), Json(metric));
-    const auto series = row.value("series", Json::array());
+    const Json empty_series = Json::array();
+    const auto& series = row.contains("series") ? row.at("series") : empty_series;
     const size_t index = found == ids.end() ? 0 : static_cast<size_t>(std::distance(ids.begin(), found)) + 1;
     const auto plot = D2D1::RectF(rect.left, rect.top + 35, rect.right - 58, rect.bottom - 24);
     fill(plot, D2D1::ColorF(0x101A27), 4);
@@ -183,9 +262,13 @@ void SettingsWindow::history_detail(float width) {
     const float left = 272, right = width - 28, span = right - left;
     const auto& row = history_detail_;
     row_action(L"‹ 返回记录", D2D1::RectF(left, 142, left + 100, 174), [this](float) { history_selected_.clear(); refresh(); }, true);
+    if (!fixture_mode_ && displayed_history_query_ != history_query()) {
+        label(error_.empty() ? L"正在读取游戏详情…" : L"暂时无法读取游戏详情", left + 120, 142, span - 120, 32, heading_.Get(), muted);
+        return;
+    }
     game_identity(row, left + 120, 135, span - 290);
     history_exclusion_action(row, D2D1::RectF(right - 145, 142, right - 65, 174));
-    row_action(L"导出", D2D1::RectF(right - 55, 142, right, 174), [this, row](float) { export_history(row); });
+    row_action(L"导出", D2D1::RectF(right - 55, 142, right, 174), [this](float) { export_history(history_detail_); });
     label(time_text(row.value("started_ms", 0ull)) + L" → " + time_text(row.value("updated_ms", 0ull)) + L"  ·  游玩 " + duration(row.value("active_seconds", 0.0)), left, 182, span, 25, small_.Get(), muted);
     const wchar_t* tabs[]{L"性能报告", L"性能图表", L"会话事件", L"设备信息"};
     for (int i = 0; i < 4; ++i) button(tabs[i], D2D1::RectF(left + i * 126, 217, left + i * 126 + 114, 250), [this, i](float) { history_tab_ = i; }, history_tab_ == i);

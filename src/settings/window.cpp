@@ -101,17 +101,11 @@ void SettingsWindow::refresh() {
         DestroyWindow(window_); return;
     }
     try {
+        if (page_ == 3) { request_history(); return; }
         status_ = ipc_request({{"command", "status"}});
         if (!host_process_) host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, status_.at("host_pid").get<DWORD>()));
         config_ = config_from_json(status_.at("config"));
         targets_ = ipc_request({{"command", "targets"}}).value("targets", Json::array());
-        if (page_ == 3) {
-            const auto history = ipc_request({{"command", "history"}, {"offset", history_page_index_ * 6}, {"limit", 6}, {"day", history_day_}});
-            history_ = history.value("history", Json::array());
-            history_count_ = history.value("total", size_t{});
-            history_dates_ = history.value("dates", Json::array()); history_seconds_ = history.value("active_seconds", 0.0);
-            if (!history_selected_.empty()) history_detail_ = ipc_request({{"command", "history_detail"}, {"id", history_selected_}}).value("record", Json::object());
-        }
         connection_failures_ = 0; error_.clear();
     } catch (const IpcConnectionError& e) {
         if (host_process_ && WaitForSingleObject(host_process_.value, 0) == WAIT_OBJECT_0) { DestroyWindow(window_); return; }
@@ -181,11 +175,11 @@ void SettingsWindow::recreate_target() {
 }
 void SettingsWindow::render_to_png(const std::wstring& path, int page) {
     page_ = std::clamp(page, 0, 4);
-    refresh();
+    if (page_ == 3) request_history(true); else refresh();
     wchar_t selected[128]{}, tab[16]{}, disk[16]{};
     // 仅离屏验证模式读取这些参数，不改变正常用户配置。
     if (GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_HISTORY_ID", selected, 128)) {
-        history_selected_ = utf8(selected); refresh();
+        history_selected_ = utf8(selected); request_history(true);
         GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_HISTORY_TAB", tab, 16);
         history_tab_ = std::clamp(_wtoi(tab), 0, 3);
     }
@@ -304,7 +298,7 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             SetWindowPos(window_, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
             InvalidateRect(window_, nullptr, FALSE); return 0;
         }
-        case WM_TIMER: refresh(); return 0;
+        case WM_TIMER: if (wparam == 2) finish_history(); else refresh(); return 0;
         case WM_KILLFOCUS:
             if (recording_notice_hotkey_) { recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); InvalidateRect(window_, nullptr, FALSE); }
             break;

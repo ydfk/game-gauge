@@ -6,6 +6,7 @@
 #include "common/update_release.h"
 #include "metrics/target.h"
 #include <fstream>
+#include <chrono>
 #include <windows.h>
 #include <cmath>
 #include <iostream>
@@ -134,6 +135,35 @@ int main() {
             close(record["stats"]["fps"]["maximum"].get<double>(), 80, "decimation must not discard summary maximum");
             close(record["stats"]["cpu_temperature"]["average"].get<double>(), 90, "missing sensors must not dilute averages");
             require(record.dump().size() < 262000, "history detail must fit IPC response limit");
+            const auto samples = directory / "filter";
+            std::filesystem::create_directory(samples);
+            auto sample = record;
+            sample.erase("display_name");
+            for (int i = 0; i < 64; ++i) {
+                const auto id = std::to_string(i);
+                sample["id"] = id;
+                sample["started_ms"] = 1000000ull + i * 86400000ull;
+                sample["game"] = i % 2 ? "first.exe" : "second.exe";
+                sample["active_seconds"] = 12;
+                std::ofstream(samples / (id + ".json")) << sample.dump();
+            }
+            const gauge::Json query{{"game", "FIRST.exe"}, {"offset", 6}, {"limit", 6}};
+            using QueryClock = std::chrono::steady_clock;
+            using Milliseconds = std::chrono::duration<double, std::milli>;
+            const auto start = QueryClock::now();
+            const auto page = gauge::query_history(samples, query);
+            const auto warmed = QueryClock::now();
+            const auto next_page = gauge::query_history(samples, query);
+            const auto end = QueryClock::now();
+            require(page == next_page, "cached query must match initial result");
+            std::cout << "64 history files: first query " << Milliseconds(warmed - start).count()
+                << " ms, cached query " << Milliseconds(end - warmed).count() << " ms\n";
+            require(page["games"].size() == 2 && page["games"]["first.exe"] == "first.exe", "legacy game filter options");
+            require(page["history"].size() == 6 && page["history"][0]["id"] == "51" && page["total"] == 32 && page["active_seconds"] == 384, "game filter before paging and totals");
+            const gauge::Json both{{"day", gauge::history_day(1000000ull)}, {"game", "second.exe"}};
+            require(gauge::query_history(samples, both)["total"] == 1, "combine game and date filters");
+            gauge::delete_history(samples, "0");
+            require(gauge::query_history(samples, both)["total"] == 0, "deleted cached history must leave the filtered list");
             gauge::delete_history(directory, "1000000-888");
         }
         { gauge::SessionHistory history(directory); game.timestamp_ms = 30000;

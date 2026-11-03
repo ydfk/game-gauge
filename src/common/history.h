@@ -22,6 +22,7 @@ private:
     std::map<uint32_t, Entry> sessions_;
 };
 Json read_history(const std::filesystem::path& directory, bool details = true);
+Json query_history(const std::filesystem::path& directory, const Json& command);
 Json read_history_entry(const std::filesystem::path& directory, const std::string& id);
 std::string history_day(uint64_t milliseconds);
 bool delete_history(const std::filesystem::path& directory, const std::string& id);

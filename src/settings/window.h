@@ -5,6 +5,7 @@
 #include <dwrite.h>
 #include <wrl/client.h>
 #include <functional>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,10 @@ private:
     static LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
     LRESULT handle(UINT message, WPARAM wparam, LPARAM lparam);
     void refresh();
+    void request_history(bool synchronous = false);
+    void finish_history();
+    Json history_query() const;
+    void choose_history_game(D2D1_RECT_F rect);
     void apply();
     void command(const char* action);
     void start_cpu_sensor();
@@ -80,7 +85,9 @@ private:
     Json status_{Json::object()}, targets_{Json::array()};
     Json history_{Json::array()};
     Json history_dates_{Json::array()}, history_detail_{Json::object()};
-    std::string history_day_, history_selected_;
+    std::string history_day_, history_game_, history_selected_;
+    Json history_games_ = Json::object(), pending_history_query_, displayed_history_query_;
+    std::future<Json> history_request_;
     double history_seconds_{};
     size_t history_date_page_{};
     int history_tab_{}, history_metric_{};
