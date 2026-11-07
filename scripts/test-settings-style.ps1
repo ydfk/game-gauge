@@ -53,10 +53,6 @@ try {
         $env:GAMEGAUGE_SETTINGS_DPI=[string]$taskDpi
         foreach ($taskPage in 0..4) { Invoke-StyleShot "dpi-$taskDpi-page-$taskPage" $taskPage }
     }
-    $env:GAMEGAUGE_SETTINGS_DPI='96'
-    $taskFixture.status.notice_hotkey_state=2; Save-StyleFixture; Invoke-StyleShot 'notice-hotkey-conflict' 0
-    $taskFixture.status.notice_hotkey_state=0; $taskFixture.status.config.obs_pause_hotkey=@{modifiers=0;key=0}
-    Save-StyleFixture; Invoke-StyleShot 'notice-hotkey-disabled' 0
     $env:GAMEGAUGE_SETTINGS_DPI='96'; $env:GAMEGAUGE_SETTINGS_HISTORY_ID=$taskRecord.id
     foreach ($taskTab in 0..3) { $env:GAMEGAUGE_SETTINGS_HISTORY_TAB=[string]$taskTab; Invoke-StyleShot "history-$taskTab" 3 }
     Remove-Item Env:GAMEGAUGE_SETTINGS_HISTORY_ID

@@ -32,7 +32,6 @@ private:
     void apply();
     void command(const char* action);
     void start_cpu_sensor();
-    void record_notice_hotkey(UINT key);
     void paint();
     void recreate_target();
     void fill(D2D1_RECT_F rect, D2D1_COLOR_F color, float radius = 0);
@@ -96,8 +95,6 @@ private:
     Config config_;
     std::vector<Hotspot> hotspots_;
     std::string error_;
-    std::wstring notice_hotkey_message_;
-    bool recording_notice_hotkey_{};
     std::string selected_metric_;
     int page_{};
     size_t target_page_{};

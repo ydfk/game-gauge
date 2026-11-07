@@ -2,7 +2,6 @@
 #include "theme.h"
 #include "common/platform.h"
 #include "hud/renderer.h"
-#include "hud/pause_notice.h"
 #include "version.h"
 #include "host/ipc_server.h"
 #include <commdlg.h>
@@ -97,21 +96,8 @@ void SettingsWindow::appearance_page(float width) {
         D2D1::RectF(column, 484, right, 548), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
     toggle(L"OLED 防烧屏", L"仅左右微移，最大偏移 4 像素", config_.oled_protection,
         D2D1::RectF(column, 554, right, 618), [this](float) { config_.oled_protection = !config_.oled_protection; apply(); });
-    toggle(L"OBS 暂停大字提醒", L"显示在游戏中央，可关闭本次提醒", config_.obs_pause_notice,
+    toggle(L"OBS 暂停大字提醒", L"显示在屏幕左上方，点击关闭本次提醒", config_.obs_pause_notice,
         D2D1::RectF(column, 624, right, 688), [this](float) { config_.obs_pause_notice = !config_.obs_pause_notice; apply(); });
-    fill(D2D1::RectF(left, 665, left + half, 722), panel, 10);
-    const bool conflict = status_.value("notice_hotkey_state", 0) == static_cast<int>(NoticeHotkeyState::conflict);
-    const auto caption = recording_notice_hotkey_ ? L"按组合键 · Esc 取消" :
-        !notice_hotkey_message_.empty() ? notice_hotkey_message_ :
-        conflict ? L"快捷键被占用，请更换" : L"关闭提醒的快捷键";
-    label(caption, left + 18, 667, half - 36, 23, body_.Get(), conflict || !notice_hotkey_message_.empty() ? amber : white);
-    row_action(recording_notice_hotkey_ ? L"等待按键…" : notice_hotkey_name(config_.obs_pause_hotkey),
-        D2D1::RectF(left + 8, 690, left + half - 88, 721), [this](float) {
-            recording_notice_hotkey_ = true; notice_hotkey_message_.clear(); SetFocus(window_);
-        }, true);
-    row_action(L"停用", D2D1::RectF(left + half - 80, 690, left + half - 8, 721), [this](float) {
-        recording_notice_hotkey_ = false; notice_hotkey_message_.clear(); config_.obs_pause_hotkey = {0, 0}; apply();
-    });
 }
 void SettingsWindow::metrics_page(float width) {
     const float left = 272, span = width - 300, box = (span - 30) / 4;

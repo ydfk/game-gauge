@@ -25,14 +25,9 @@ int main() {
         metric_style_contracts();
         component_contracts();
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"obs_pause_notice", true}}))).obs_pause_notice, "OBS reminder setting must persist");
-        const auto legacy_notice = gauge::config_from_json(gauge::Json::object());
-        require(legacy_notice.obs_pause_hotkey == gauge::NoticeHotkey{MOD_CONTROL | MOD_SHIFT, VK_F10}, "legacy shortcut must retain its original default");
-        auto custom_notice = legacy_notice; custom_notice.obs_pause_hotkey = {MOD_CONTROL | MOD_ALT, 'K'};
-        require(gauge::config_from_json(gauge::config_json(custom_notice)).obs_pause_hotkey == custom_notice.obs_pause_hotkey, "custom shortcut must survive serialization");
-        custom_notice.obs_pause_hotkey = {0, 0};
-        require(gauge::config_from_json(gauge::config_json(custom_notice)).obs_pause_hotkey == custom_notice.obs_pause_hotkey, "disabled shortcut must survive serialization");
-        require(!gauge::valid_notice_hotkey({MOD_CONTROL, VK_F12}) && !gauge::valid_notice_hotkey({0, 'A'}) &&
-            !gauge::valid_notice_hotkey({MOD_WIN, 'A'}), "reserved and unmodified shortcuts must be rejected");
+        const auto legacy_notice = gauge::config_from_json({{"obs_pause_notice", true}, {"obs_pause_hotkey", {{"modifiers", 6}, {"key", 121}}}});
+        require(legacy_notice.obs_pause_notice && !gauge::config_json(legacy_notice).contains("obs_pause_hotkey"),
+            "loading a legacy shortcut must preserve the reminder and omit the retired field on save");
         require(!gauge::config_from_json(gauge::Json::object()).oled_protection, "legacy configs leave OLED shift off");
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"oled_protection", true}}))).oled_protection,
             "OLED preference must survive serialization");

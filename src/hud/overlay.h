@@ -16,7 +16,6 @@ public:
     std::optional<bool> take_edit_result() { return std::exchange(edit_result_, std::nullopt); }
     bool capture_requested() const { return capture_requested_; }
     DWORD capture_error() const { return capture_error_; }
-    NoticeHotkeyState notice_hotkey_state() const { return pause_notice_->hotkey_state(); }
     const std::string& error() const { return error_; }
     HWND window() const { return window_; }
     int dragged_x() const;

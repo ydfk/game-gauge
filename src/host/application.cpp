@@ -128,7 +128,7 @@ Json Application::request(const Json& command) {
         return {{"ok", true}, {"version", 1}, {"host_pid", GetCurrentProcessId()}, {"config", config_json(config_)}, {"snapshot", snapshot_json(snapshot)},
             {"hud_preview", preview}, {"app_version", GAMEGAUGE_VERSION}, {"update", updater_.status()}, {"components", components_.status(snapshot)},
             {"capture", {{"requested", config_.exclude_capture}, {"accepted", capture_requested_.load()}, {"error", capture_error_.load()}, {"verified", false}}},
-            {"notice_hotkey_state", static_cast<int>(notice_hotkey_state_.load())}, {"warning", warning_}, {"hud_error", hud_error_}};
+            {"warning", warning_}, {"hud_error", hud_error_}};
     }
     if (action == "apply") { update_config(config_from_json(command.at("config"))); return {{"ok", true}}; }
     if (action == "check_update") { updater_.check(); return {{"ok", true}}; }
@@ -194,7 +194,6 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
                 self->overlay_->edit(false);
             }
             self->overlay_->update(self->snapshot(), self->config());
-            self->notice_hotkey_state_ = self->overlay_->notice_hotkey_state();
             const auto component_status = self->components_.status(self->sampler_.snapshot());
             const auto items = component_status.value("items", Json::array());
             const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {

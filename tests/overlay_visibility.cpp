@@ -3,6 +3,7 @@
 #include <stdexcept>
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 int main() {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const auto instance = GetModuleHandleW(nullptr);
     HWND game = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"HUD visibility fixture",
         WS_POPUP, 80, 80, 960, 180, nullptr, nullptr, instance, nullptr);
@@ -34,28 +35,23 @@ int main() {
         require(IsWindowVisible(overlay.window()), "restored game must restore HUD");
         gauge::PauseNotice notice(instance);
         config.obs_pause_notice = true; snapshot.obs_state = "paused"; snapshot.target.foreground = true;
-        UINT test_key{};
-        for (UINT key = VK_F13; key <= VK_F24; ++key) {
-            if (RegisterHotKey(game, 4242, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, key)) { test_key = key; break; }
-        }
-        require(test_key != 0, "no free test shortcut available");
-        config.obs_pause_hotkey = {MOD_CONTROL | MOD_ALT | MOD_SHIFT, test_key};
         notice.update(snapshot, config);
         require(IsWindowVisible(notice.window()), "OBS pause notice missing");
-        require(notice.hotkey_state() == gauge::NoticeHotkeyState::conflict, "occupied shortcut must report conflict");
-        UnregisterHotKey(game, 4242);
-        config.obs_pause_hotkey = {0, 0}; notice.update(snapshot, config);
-        require(notice.hotkey_state() == gauge::NoticeHotkeyState::disabled, "disabled shortcut must not be registered");
-        require(RegisterHotKey(game, 4242, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, test_key) != FALSE, "disabled shortcut must stay available");
-        UnregisterHotKey(game, 4242);
-        config.obs_pause_hotkey = {MOD_CONTROL | MOD_ALT | MOD_SHIFT, test_key}; notice.update(snapshot, config);
-        require(notice.hotkey_state() == gauge::NoticeHotkeyState::registered, "custom shortcut must register after conflict resolves");
-        SendMessageW(notice.window(), WM_HOTKEY, 2, 0);
-        require(IsWindowVisible(notice.window()), "unrelated hotkey must not dismiss reminder");
-        SendMessageW(notice.window(), WM_HOTKEY, 1, 0); notice.update(snapshot, config);
+        MONITORINFO monitor{sizeof(monitor)};
+        RECT bounds{};
+        require(GetMonitorInfoW(MonitorFromWindow(game, MONITOR_DEFAULTTONEAREST), &monitor) &&
+            GetWindowRect(notice.window(), &bounds), "cannot locate pause notice");
+        const auto margin = MulDiv(24, GetDpiForWindow(game), 96);
+        require(bounds.left == monitor.rcWork.left + margin && bounds.top == monitor.rcWork.top + margin &&
+            bounds.right <= monitor.rcWork.right && bounds.bottom <= monitor.rcWork.bottom, "pause notice must fit at the game's screen top left");
+        SendMessageW(notice.window(), WM_HOTKEY, 1, MAKELPARAM(MOD_CONTROL | MOD_SHIFT, VK_F10));
+        SendMessageW(notice.window(), WM_CLOSE, 0, 0);
+        SendMessageW(notice.window(), WM_LBUTTONUP, 0, MAKELPARAM(12, 12));
+        require(IsWindowVisible(notice.window()), "only the notice dismissal area may close the reminder");
+        SendMessageW(notice.window(), WM_LBUTTONUP, 0,
+            MAKELPARAM((bounds.right - bounds.left) / 2, (bounds.bottom - bounds.top) * 4 / 5));
+        notice.update(snapshot, config);
         require(!IsWindowVisible(notice.window()), "dismissal must persist during current pause");
-        require(RegisterHotKey(game, 4242, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, test_key) != FALSE, "dismissal must release shortcut");
-        UnregisterHotKey(game, 4242);
         snapshot.obs_state = "recording"; notice.update(snapshot, config);
         require(!IsWindowVisible(notice.window()), "recording must hide pause notice");
         snapshot.obs_state = "paused"; notice.update(snapshot, config);
