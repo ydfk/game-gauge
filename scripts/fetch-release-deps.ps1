@@ -9,8 +9,34 @@ $taskAssets = @(
 )
 foreach ($taskAsset in $taskAssets) {
     $taskFile = Join-Path $taskDeps $taskAsset.Name
-    if (!(Test-Path -LiteralPath $taskFile)) { Invoke-WebRequest -Uri $taskAsset.Url -OutFile $taskFile }
-    if ((Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash -ne $taskAsset.Hash) { throw "依赖校验失败：$taskFile" }
+    if ((Test-Path -LiteralPath $taskFile) -and
+        (Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash -eq $taskAsset.Hash) {
+        Write-Host "使用已校验依赖：$($taskAsset.Name)"
+        continue
+    }
+    $taskPartial = "$taskFile.download"
+    try {
+        foreach ($taskAttempt in 1..4) {
+            try {
+                Write-Host "下载依赖 $($taskAsset.Name)，第 $taskAttempt/4 次：$($taskAsset.Url)"
+                Invoke-WebRequest -Uri $taskAsset.Url -OutFile $taskPartial -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 180
+                if ((Get-FileHash -LiteralPath $taskPartial -Algorithm SHA256).Hash -ne $taskAsset.Hash) {
+                    throw "依赖 SHA256 校验失败：$($taskAsset.Name)"
+                }
+                Move-Item -LiteralPath $taskPartial -Destination $taskFile -Force
+                break
+            } catch {
+                if ($taskAttempt -eq 4) {
+                    throw "依赖下载失败（已尝试 4 次）：$($taskAsset.Name)，$($taskAsset.Url)。$($_.Exception.Message)"
+                }
+                $taskDelay = 3 * [Math]::Pow(2, $taskAttempt - 1)
+                Write-Warning "下载失败：$($_.Exception.Message)。$taskDelay 秒后重试。"
+                Start-Sleep -Seconds $taskDelay
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $taskPartial -Force -ErrorAction SilentlyContinue
+    }
 }
 Expand-Archive -LiteralPath "$taskDeps/PawnIO.Modules-0.2.11.zip" -DestinationPath "$taskDeps/modules-0.2.11" -Force
 $taskModule = @(Get-ChildItem "$taskDeps/modules-0.2.11" -Filter AMDFamily17.bin -Recurse)
