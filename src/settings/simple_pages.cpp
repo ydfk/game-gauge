@@ -96,7 +96,7 @@ void SettingsWindow::appearance_page(float width) {
         D2D1::RectF(column, 484, right, 548), [this](float) { config_.exclude_capture = !config_.exclude_capture; apply(); });
     toggle(L"OLED 防烧屏", L"仅左右微移，最大偏移 4 像素", config_.oled_protection,
         D2D1::RectF(column, 554, right, 618), [this](float) { config_.oled_protection = !config_.oled_protection; apply(); });
-    toggle(L"OBS 暂停大字提醒", L"显示在屏幕左上方，点击关闭本次提醒", config_.obs_pause_notice,
+    toggle(L"OBS 暂停大字提醒", L"显示在游戏中央，点击关闭本次提醒", config_.obs_pause_notice,
         D2D1::RectF(column, 624, right, 688), [this](float) { config_.obs_pause_notice = !config_.obs_pause_notice; apply(); });
 }
 void SettingsWindow::metrics_page(float width) {

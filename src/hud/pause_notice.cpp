@@ -27,16 +27,15 @@ void PauseNotice::update(const Snapshot& s, const Config& config) {
         ShowWindow(window_, SW_HIDE);
         return;
     }
-    MONITORINFO monitor{sizeof(monitor)};
-    if (!GetMonitorInfoW(MonitorFromWindow(game, MONITOR_DEFAULTTONEAREST), &monitor)) {
+    RECT bounds{};
+    POINT origin{};
+    if (!GetClientRect(game, &bounds) || !ClientToScreen(game, &origin)) {
         ShowWindow(window_, SW_HIDE);
         return;
     }
     const UINT dpi = GetDpiForWindow(game);
-    const auto& work = monitor.rcWork;
-    const int margin = MulDiv(24, dpi, 96);
-    const SIZE size{std::min<LONG>(work.right - work.left - margin * 2, MulDiv(720, dpi, 96)),
-        std::min<LONG>(work.bottom - work.top - margin * 2, MulDiv(210, dpi, 96))};
+    const SIZE size{std::min<LONG>(bounds.right, MulDiv(720, dpi, 96)),
+        std::min<LONG>(bounds.bottom, MulDiv(210, dpi, 96))};
     if (!dpi || size.cx <= 0 || size.cy <= 0) {
         ShowWindow(window_, SW_HIDE);
         return;
@@ -46,7 +45,7 @@ void PauseNotice::update(const Snapshot& s, const Config& config) {
     if (drawn_.cx != size.cx || drawn_.cy != size.cy || dpi_ != dpi) {
         renderer_->render_notice(dpi, size); drawn_ = size; dpi_ = dpi;
     }
-    SetWindowPos(window_, HWND_TOPMOST, work.left + margin, work.top + margin,
+    SetWindowPos(window_, HWND_TOPMOST, origin.x + (bounds.right - size.cx) / 2, origin.y + (bounds.bottom - size.cy) / 2,
         size.cx, size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 LRESULT CALLBACK PauseNotice::procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {

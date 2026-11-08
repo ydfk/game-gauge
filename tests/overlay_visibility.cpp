@@ -37,13 +37,14 @@ int main() {
         config.obs_pause_notice = true; snapshot.obs_state = "paused"; snapshot.target.foreground = true;
         notice.update(snapshot, config);
         require(IsWindowVisible(notice.window()), "OBS pause notice missing");
-        MONITORINFO monitor{sizeof(monitor)};
-        RECT bounds{};
-        require(GetMonitorInfoW(MonitorFromWindow(game, MONITOR_DEFAULTTONEAREST), &monitor) &&
+        RECT bounds{}, client{};
+        POINT origin{};
+        require(GetClientRect(game, &client) && ClientToScreen(game, &origin) &&
             GetWindowRect(notice.window(), &bounds), "cannot locate pause notice");
-        const auto margin = MulDiv(24, GetDpiForWindow(game), 96);
-        require(bounds.left == monitor.rcWork.left + margin && bounds.top == monitor.rcWork.top + margin &&
-            bounds.right <= monitor.rcWork.right && bounds.bottom <= monitor.rcWork.bottom, "pause notice must fit at the game's screen top left");
+        require(bounds.left == origin.x + (client.right - (bounds.right - bounds.left)) / 2 &&
+            bounds.top == origin.y + (client.bottom - (bounds.bottom - bounds.top)) / 2 &&
+            bounds.right <= origin.x + client.right && bounds.bottom <= origin.y + client.bottom,
+            "pause notice must fit at the center of the game client area");
         SendMessageW(notice.window(), WM_HOTKEY, 1, MAKELPARAM(MOD_CONTROL | MOD_SHIFT, VK_F10));
         SendMessageW(notice.window(), WM_CLOSE, 0, 0);
         SendMessageW(notice.window(), WM_LBUTTONUP, 0, MAKELPARAM(12, 12));
