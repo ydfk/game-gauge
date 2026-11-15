@@ -1,16 +1,23 @@
-﻿param([string]$Version, [string]$Repository = '')
+﻿param([string]$Version, [string]$Repository = '', [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 if (!$Version) { $Version = (Get-Content -LiteralPath "$taskRoot/VERSION" -Raw).Trim() }
+if (!$OutputDirectory) { $OutputDirectory = Join-Path $taskRoot 'build/package' }
 & "$PSScriptRoot/build-core.ps1" -Version $Version -Repository $Repository
 $taskBuild = Join-Path $taskRoot 'build/setup'
 $taskStage = Join-Path $taskBuild ('stage-' + [guid]::NewGuid().ToString('N'))
 $taskApp = Join-Path $taskStage 'app'
 New-Item -ItemType Directory -Path "$taskApp/.deps","$taskApp/scripts","$taskApp/licenses","$taskApp/components" -Force | Out-Null
 @{version=$Version;repository=$Repository} | ConvertTo-Json | Set-Content "$taskApp/release.json" -Encoding utf8
-foreach ($taskName in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe')) {
+$taskExecutables = @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.CpuProbe.exe','GameGauge.Diagnostics.exe','GameGauge.Saves.exe')
+foreach ($taskName in $taskExecutables) {
     Copy-Item -LiteralPath (Join-Path $taskRoot "build/core/bin/Release/$taskName") -Destination $taskApp
 }
+$taskHashes = foreach ($taskName in $taskExecutables) {
+    $taskFile = Join-Path $taskApp $taskName
+    @{name=$taskName;sha256=(Get-FileHash -LiteralPath $taskFile -Algorithm SHA256).Hash;bytes=(Get-Item -LiteralPath $taskFile).Length}
+}
+@{version=$Version;files=@($taskHashes)} | ConvertTo-Json -Depth 4 | Set-Content "$taskApp/release-manifest.json" -Encoding utf8
 foreach ($taskName in @('install-presentmon.ps1','repair-components.ps1','setup-uninstall.ps1','setup-processes.ps1','setup-shortcuts.ps1')) {
     [IO.File]::WriteAllText((Join-Path "$taskApp/scripts" $taskName), [IO.File]::ReadAllText((Join-Path $PSScriptRoot $taskName)), [Text.UTF8Encoding]::new($true))
 }
@@ -18,6 +25,8 @@ Copy-Item -LiteralPath "$taskRoot/.deps/AMDFamily17-0.2.11.bin" -Destination "$t
 Copy-Item -LiteralPath "$taskRoot/third_party/nlohmann/LICENSE.MIT" -Destination "$taskApp/licenses/nlohmann.txt"
 Copy-Item -LiteralPath "$taskRoot/third_party/presentmon/LICENSE.txt" -Destination "$taskApp/licenses/PresentMon.txt"
 Copy-Item -LiteralPath "$taskRoot/THIRD_PARTY_NOTICES.md" -Destination $taskApp
+Copy-Item -LiteralPath "$taskRoot/docs/saves.md" -Destination $taskApp
+& "$PSScriptRoot/package-saves-notices.ps1" -Destination "$taskApp/licenses/saves"
 $taskDependencies = @(
     @{Source='PresentMon-2.6.0.msi';Name='PresentMon-2.6.0.msi';Hash='0CB43D2622356C1E277A77F840887F9000CEA4E2D4236C0850922FC204C6F820'},
     @{Source='PawnIO_setup-2.2.0.exe';Name='PawnIO_setup.exe';Hash='1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032'}
@@ -38,9 +47,9 @@ $taskIcon = (Join-Path $taskRoot 'src/host/app.ico').Replace('\','/')
 "#include <windows.h>`n#include `"version_resource.rc`"`n1 RT_MANIFEST `"$taskManifest`"`n101 ICON `"$taskIcon`"`n101 RCDATA `"$taskPayload`"`n102 RCDATA `"$taskInstall`"" | Set-Content -LiteralPath "$taskBuild/payload.rc" -Encoding utf8
 & "$PSScriptRoot/build-core.ps1" -Version $Version -Repository $Repository
 if ($LASTEXITCODE) { throw '安装器构建失败' }
-New-Item -ItemType Directory -Path "$taskRoot/build/package" -Force | Out-Null
-$taskOutput = "$taskRoot/build/package/GameGauge-$Version-Setup.exe"
+New-Item -ItemType Directory -Path "$OutputDirectory" -Force | Out-Null
+$taskOutput = (Join-Path $OutputDirectory "GameGauge-$Version-Setup.exe")
 Copy-Item -LiteralPath "$taskRoot/build/core/bin/Release/GameGauge.Setup.exe" -Destination $taskOutput -Force
 $taskHash = (Get-FileHash -LiteralPath $taskOutput -Algorithm SHA256).Hash.ToLowerInvariant()
-"$taskHash  GameGauge-$Version-Setup.exe" | Set-Content "$taskRoot/build/package/SHA256SUMS.txt" -Encoding ascii
+"$taskHash  GameGauge-$Version-Setup.exe" | Set-Content (Join-Path $OutputDirectory 'SHA256SUMS.txt') -Encoding ascii
 Write-Host "已生成：$taskOutput"

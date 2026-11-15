@@ -15,9 +15,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_PAGE", page_text, 16);
         const int page = _wtoi(page_text);
         const bool capture = snapshot_length || (count >= 3 && std::wstring_view(arguments[1]) == L"--snapshot");
+        bool open_saves{};
+        for (int i = 1; i < count; ++i) if (std::wstring_view(arguments[i]) == L"--saves") open_saves = true;
         if (!capture) if (auto existing = FindWindowW(L"GameGauge.Settings", nullptr)) {
             // 离屏验证独立渲染；正常打开仍复用已有窗口并保留最大化状态。
             ShowWindowAsync(existing, IsIconic(existing) ? SW_RESTORE : (IsZoomed(existing) ? SW_SHOWMAXIMIZED : SW_SHOW));
+            if (open_saves) PostMessageW(existing, gauge::open_saves_message, 0, 0);
             SetForegroundWindow(existing); LocalFree(arguments); CoUninitialize(); return 0;
         }
         gauge::Json fixture;
@@ -44,7 +47,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
                 CoUninitialize(); return 0;
             }
         }
-        gauge::SettingsWindow window(instance, host_pid, std::move(fixture));
+        gauge::SettingsWindow window(instance, host_pid, std::move(fixture), open_saves);
         if (snapshot_length && snapshot_length < 32768) {
             LocalFree(arguments);
             window.render_to_png(snapshot, page); CoUninitialize(); return 0;

@@ -13,6 +13,7 @@ std::wstring user_token();
 std::wstring pipe_name();
 std::string error_text(DWORD code);
 uint64_t file_ticks(const FILETIME& time);
+std::string new_request_id();
 struct UniqueHandle {
     HANDLE value{INVALID_HANDLE_VALUE};
     UniqueHandle() = default;

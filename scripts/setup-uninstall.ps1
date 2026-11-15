@@ -7,10 +7,10 @@ if (!$taskPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $taskDestination = [IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'GameGauge'))
 if ([IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent)) -ne $taskDestination) { throw '卸载路径校验失败' }
 if ((Get-Item -LiteralPath $taskDestination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '拒绝卸载重解析目录' }
-Get-Service GameGauge.Sensor -ErrorAction SilentlyContinue | Stop-Service -Force
-& sc.exe delete GameGauge.Sensor | Out-Null
 . (Join-Path $PSScriptRoot 'setup-processes.ps1')
 Stop-GameGaugeProcesses -Directory $taskDestination
+Get-Service GameGauge.Sensor -ErrorAction SilentlyContinue | Stop-Service -Force
+& sc.exe delete GameGauge.Sensor | Out-Null
 Unregister-ScheduledTask -TaskName 'GameGauge.StartAfterInstall' -Confirm:$false -ErrorAction SilentlyContinue
 . (Join-Path $PSScriptRoot 'setup-shortcuts.ps1')
 $taskShortcutPath = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'GameGauge.lnk'

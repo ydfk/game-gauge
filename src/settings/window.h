@@ -11,9 +11,10 @@
 
 namespace gauge {
 inline constexpr DWORD settings_window_style = WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX;
+inline constexpr UINT open_saves_message = WM_APP + 19;
 class SettingsWindow {
 public:
-    explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0, Json fixture = Json{});
+    explicit SettingsWindow(HINSTANCE instance, DWORD host_pid = 0, Json fixture = Json{}, bool open_saves = false);
     int run();
     void render_to_png(const std::wstring& path, int page = 0);
 private:
@@ -63,6 +64,17 @@ private:
     void export_history(const Json& record);
     void history_exclusion_action(const Json& record, D2D1_RECT_F rect);
     void updates_page(float width);
+    void saves_page(float width);
+    void saves_section(float width);
+    void saves_records(float width, bool cloud);
+    void saves_cloud(float width);
+    void saves_open();
+    void saves_refresh();
+    void saves_poll();
+    void saves_send(Json request, std::function<void(Json)> done = {});
+    void saves_list(int offset = 0, bool remote = false, bool fresh = false);
+    void saves_configure(std::wstring slot = {});
+    Json saves_target(const char* command) const;
     void list_surface(D2D1_RECT_F rect, bool selected = false);
     void row_action(const std::wstring& title, D2D1_RECT_F rect, std::function<void(float)> action, bool accent = false);
     void page_buttons(float right, float y, size_t& page, size_t pages, bool reload = false);
@@ -87,6 +99,16 @@ private:
     std::string history_day_, history_game_, history_selected_;
     Json history_games_ = Json::object(), pending_history_query_, displayed_history_query_;
     std::future<Json> history_request_;
+    std::future<Json> saves_request_;
+    std::function<void(Json)> saves_done_;
+    std::string saves_job_;
+    std::wstring saves_message_;
+    Json saves_state_ = Json::object(), saves_games_ = Json::array(), saves_slots_ = Json::array();
+    Json saves_game_ = Json::object(), saves_rows_ = Json::object(), saves_record_ = Json::object();
+    Json saves_remote_rows_ = Json::object(), saves_remote_record_ = Json::object();
+    ULONGLONG saves_next_poll_{};
+    int saves_tab_{};
+    bool saves_available_{}, saves_error_{}, saves_hotkey_conflict_{};
     double history_seconds_{};
     size_t history_date_page_{};
     int history_tab_{}, history_metric_{};

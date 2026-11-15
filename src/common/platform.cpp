@@ -1,10 +1,24 @@
 #include "platform.h"
+#include <objbase.h>
+#include <algorithm>
+#include <cctype>
 #include <sddl.h>
 #include <shlobj.h>
 #include <stdexcept>
 #include <vector>
 
 namespace gauge {
+std::string new_request_id() {
+    GUID id{};
+    wchar_t formatted[39]{};
+    if (FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id, formatted, 39))
+        throw std::runtime_error("无法生成任务标识");
+    auto text = utf8(std::wstring_view(formatted + 1, 36));
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char letter) {
+        return static_cast<char>(std::tolower(letter));
+    });
+    return text;
+}
 namespace { std::filesystem::path custom_data_dir; }
 std::string utf8(std::wstring_view value) {
     if (value.empty()) return {};

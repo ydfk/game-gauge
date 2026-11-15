@@ -78,6 +78,28 @@ try {
         Save-StyleFixture; Invoke-StyleShot "components-$taskState" 4
     }
     Invoke-StyleShot 'components-warning' 1
+    $taskSaveRows = @(1..6 | ForEach-Object {
+        @{
+            id=[guid]::NewGuid().ToString();at='2026-11-15T12:35:00Z';title="测试进度备份 $_"
+            trigger='manual';profile='76561198000000001';bytes=3214096;locked=($_ -eq 1);note='恢复前请确认游戏已退出。'
+        }
+    })
+    $taskSavePage = @{records=$taskSaveRows;total=1500;offset=0;next=6}
+    $taskFixture.saves = @{
+        available=$true;state=@{enabled=$true;hotkey='Ctrl+Alt+F8';cloud=@{url='https://example.invalid/dav/';user='fixture';status='本地库已上传 7 份 · 待上传 2 份';automatic=$true}}
+        game=@{name='影之刃零';game_id='steam-4115450';profile='76561198000000001';settings=@{
+            save_dir='C:\测试\76561198000000001';backup_dir='D:\测试备份';interval_minutes=10;keep_auto=100;auto_enabled=$true
+        }}
+        records=$taskSavePage;record=$taskSaveRows[0];remote_records=$taskSavePage;remote_record=$taskSaveRows[0]
+    }
+    foreach ($taskDpi in @(120,144,192)) {
+        $env:GAMEGAUGE_SETTINGS_DPI = [string]$taskDpi
+        foreach ($taskTab in 0..2) {
+            $taskFixture.saves.tab = $taskTab
+            Save-StyleFixture
+            Invoke-StyleShot "saves-dpi-$taskDpi-tab-$taskTab" 5
+        }
+    }
     Write-Host "全部设置页、历史详情、OBS 四种状态与硬盘温度在隔离样本中渲染通过：$taskOutput"
 } finally {
     foreach ($taskName in $taskEnvNames) { [Environment]::SetEnvironmentVariable($taskName,$taskPrevious[$taskName]) }

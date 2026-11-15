@@ -26,12 +26,19 @@ float ui_scale(UINT dpi, const RECT& work) {
     return std::max(.75f, std::min({dpi / 96.f, 1.4f, width, height}));
 }
 }
-SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture) : instance_(instance), fixture_mode_(fixture.is_object()) {
+SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture, bool open_saves) : instance_(instance), fixture_mode_(fixture.is_object()) {
     if (fixture_mode_) {
         status_ = fixture.at("status"); config_ = config_from_json(status_.at("config"));
         targets_ = fixture.value("targets", Json::array()); history_ = fixture.value("history", Json::array());
         history_detail_ = fixture.value("history_detail", Json::object()); history_count_ = history_.size();
         history_dates_ = fixture.value("dates", Json::array()); history_seconds_ = fixture.value("active_seconds", 0.0);
+        const auto saves = fixture.value("saves", Json::object());
+        saves_available_ = saves.value("available", false);
+        saves_state_ = saves.value("state", Json::object()); saves_game_ = saves.value("game", Json::object());
+        saves_rows_ = saves.value("records", Json::object()); saves_tab_ = std::clamp(saves.value("tab", 0), 0, 2);
+        saves_record_ = saves.value("record", Json::object());
+        saves_remote_rows_ = saves.value("remote_records", Json::object());
+        saves_remote_record_ = saves.value("remote_record", Json::object());
     }
     if (host_pid) {
         host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, host_pid));
@@ -88,6 +95,8 @@ SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture)
     format(L"Microsoft YaHei UI", 13, DWRITE_FONT_WEIGHT_MEDIUM, button_format_);
     button_format_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     refresh(); SetTimer(window_, 1, 1200, nullptr);
+    if (!fixture_mode_) SetTimer(window_, 3, 150, nullptr);
+    if (open_saves) saves_open();
 }
 int SettingsWindow::run() {
     ShowWindow(window_, SW_SHOW); UpdateWindow(window_);
@@ -102,6 +111,7 @@ void SettingsWindow::refresh() {
     }
     try {
         if (page_ == 3) { request_history(); return; }
+        if (page_ == 5) return;
         status_ = ipc_request({{"command", "status"}});
         if (!host_process_) host_process_.reset(OpenProcess(SYNCHRONIZE, FALSE, status_.at("host_pid").get<DWORD>()));
         config_ = config_from_json(status_.at("config"));
@@ -156,7 +166,7 @@ void SettingsWindow::recreate_target() {
     target_ = hwnd_target_;
 }
 void SettingsWindow::render_to_png(const std::wstring& path, int page) {
-    page_ = std::clamp(page, 0, 4);
+    page_ = std::clamp(page, 0, 5);
     if (page_ == 3) request_history(true); else refresh();
     wchar_t selected[128]{}, tab[16]{}, disk[16]{};
     // 仅离屏验证模式读取这些参数，不改变正常用户配置。
@@ -206,7 +216,7 @@ void SettingsWindow::paint() {
     target_->Clear(background);
     navigation(width, height);
     window_controls(width);
-    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
+    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新", L"存档备份"};
     label(page_titles[page_], 272, 54, width - 420, 40, title_.Get(), white);
     line(272, 122, width - 28, 122, edge);
     switch (page_) {
@@ -215,11 +225,12 @@ void SettingsWindow::paint() {
     case 2: games_page(width); break;
     case 3: history_page(width); break;
     case 4: updates_page(width); break;
+    case 5: saves_page(width); break;
     }
     if (!error_.empty()) {
         fill(D2D1::RectF(272, height - 39, width - 28, height - 7), tint(amber, .10f), 6);
         label(L"提示：" + wide(error_), 284, height - 35, width - 324, 24, small_.Get(), amber);
-    } else if (page_ != 4) {
+    } else if (page_ < 4) {
         const auto items = status_.value("components", Json::object()).value("items", Json::array());
         const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {
             const auto state = item.value("state", std::string{});
@@ -280,7 +291,12 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             SetWindowPos(window_, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
             InvalidateRect(window_, nullptr, FALSE); return 0;
         }
-        case WM_TIMER: if (wparam == 2) finish_history(); else refresh(); return 0;
+        case open_saves_message: saves_open(); return 0;
+        case WM_TIMER:
+            if (wparam == 2) finish_history();
+            else if (wparam == 3) saves_poll();
+            else refresh();
+            return 0;
         case WM_KEYDOWN:
             if (wparam == VK_TAB && !hotspots_.empty()) {
                 const auto size = static_cast<int>(hotspots_.size());
@@ -312,7 +328,7 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             try { paint(); } catch (...) { EndPaint(window_, &paint_info); throw; }
             EndPaint(window_, &paint_info); return 0;
         }
-        case WM_DESTROY: KillTimer(window_, 1); PostQuitMessage(0); return 0;
+        case WM_DESTROY: KillTimer(window_, 1); KillTimer(window_, 2); KillTimer(window_, 3); PostQuitMessage(0); return 0;
         }
     } catch (const std::exception& e) { error_ = e.what(); }
     return DefWindowProcW(window_, message, wparam, lparam);

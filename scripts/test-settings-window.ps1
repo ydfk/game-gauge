@@ -13,6 +13,8 @@ public static class SettingsNative {
     [StructLayout(LayoutKind.Sequential)] public struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref Point p);
     [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
@@ -47,8 +49,13 @@ public static class SettingsNative {
     }
     public static void ExitButton(IntPtr h) {
         var r = Client(h); var s = Scale(h);
-        var p = Position((int)(100*s), (int)(r.Bottom-132*s));
+        var p = Position((int)(182*s), (int)(r.Bottom-50*s));
         SendMessage(h, 0x201, new IntPtr(1), p); SendMessage(h, 0x202, IntPtr.Zero, p);
+    }
+    public static void OpenSavesRuleDialog(IntPtr h) {
+        var s = Scale(h);
+        var p = Position((int)(340*s), (int)(506*s));
+        PostMessage(h, 0x201, new IntPtr(1), p); PostMessage(h, 0x202, IntPtr.Zero, p);
     }
 }
 '@
@@ -105,10 +112,24 @@ try {
     $taskWindow = Wait-SettingsWindow
     $taskSettings = Get-Process GameGauge.Settings | Where-Object { $_.Path -eq "$taskBin\GameGauge.Settings.exe" } | Select-Object -First 1
     if (!$taskSettings) { throw '托盘没有重新打开设置。' }
+    [SettingsNative]::SendMessage($taskWindow, 0x8013, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Milliseconds 1600
+    [SettingsNative]::OpenSavesRuleDialog($taskWindow)
+    $taskDialog = [IntPtr]::Zero
+    for ($taskTry = 0; $taskTry -lt 45; ++$taskTry) {
+        $taskDialog = [SettingsNative]::FindWindow('#32770', '存档目录与自动备份规则')
+        if ($taskDialog -ne [IntPtr]::Zero) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if ($taskDialog -eq [IntPtr]::Zero -or [SettingsNative]::GetDlgItem($taskDialog, 100) -eq [IntPtr]::Zero) {
+        throw '存档页面没有打开原生备份规则表单。'
+    }
+    [SettingsNative]::PostMessage($taskDialog, 0x111, [IntPtr]2, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Milliseconds 350
     [SettingsNative]::ExitButton($taskWindow)
     if (!$taskHost.WaitForExit(5000) -or $taskHost.ExitCode -ne 0) { throw '退出程序按钮没有正常结束宿主。' }
     if (!$taskSettings.WaitForExit(3000)) { throw '退出程序后设置未关闭。' }
-    Write-Host '最小化禁用、标题拖动/边缘命中、最大化/还原、任务栏边界、托盘保持最大化、关闭后重开和退出程序：通过。'
+    Write-Host '设置窗口生命周期、存档备份页面与原生规则表单、退出程序：通过。'
 } finally {
     if (!$taskHost.HasExited) { Invoke-TestRequest 'quit'; $taskHost.WaitForExit(3000) | Out-Null }
     if ($taskSettings -and !$taskSettings.HasExited) { Stop-Process -Id $taskSettings.Id -ErrorAction SilentlyContinue }

@@ -33,10 +33,18 @@ jobs:
           "RELEASE_VERSION=$($env:RELEASE_TAG.Substring(1))" >> $env:GITHUB_ENV
       - name: Download verified dependencies
         run: ./scripts/fetch-release-deps.ps1
+      - name: Install pinned Rust
+        run: |
+          $toolchain = [regex]::Match((Get-Content saves/rust-toolchain.toml -Raw), 'channel = "([^"]+)"').Groups[1].Value
+          rustup toolchain install $toolchain --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { throw 'Rust toolchain installation failed' }
       - name: Build, test and package
         env:
           RELEASE_REPOSITORY: ${{ github.repository }}
-        run: ./scripts/package-setup.ps1 -Version $env:RELEASE_VERSION -Repository $env:RELEASE_REPOSITORY
+        run: |
+          ./scripts/package-setup.ps1 -Version $env:RELEASE_VERSION -Repository $env:RELEASE_REPOSITORY
+          ./scripts/package-portable.ps1 -Version $env:RELEASE_VERSION
+          Get-Content "build/package/GameGauge-$env:RELEASE_VERSION-win-x64.zip.sha256" | Add-Content build/package/SHA256SUMS.txt -Encoding ascii
       - name: Create draft and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,7 +58,8 @@ jobs:
             gh release create $env:RELEASE_TAG --verify-tag --draft --title "GameGauge $env:RELEASE_VERSION" --generate-notes
             if ($LASTEXITCODE) { throw 'Release creation failed' }
           }
-          gh release upload $env:RELEASE_TAG "build/package/GameGauge-$env:RELEASE_VERSION-Setup.exe" build/package/SHA256SUMS.txt --clobber
+          $files = @("GameGauge-$env:RELEASE_VERSION-Setup.exe", "GameGauge-$env:RELEASE_VERSION-win-x64.zip")
+          gh release upload $env:RELEASE_TAG "build/package/$($files[0])" "build/package/$($files[1])" build/package/SHA256SUMS.txt --clobber
           if ($LASTEXITCODE) { throw 'Asset upload failed' }
           # 按标签的 REST 接口只返回已发布版本；草稿必须通过 Release ID 读取。
           $releaseId = gh release view $env:RELEASE_TAG --json databaseId --jq .databaseId
@@ -58,8 +67,10 @@ jobs:
           $metadata = gh api "repos/$env:GH_REPO/releases/$releaseId" | ConvertFrom-Json
           if ($LASTEXITCODE) { throw 'Asset verification failed' }
           if (!$metadata.draft -or $metadata.tag_name -ne $env:RELEASE_TAG -or $metadata.id -ne $releaseId) { throw 'Draft release identity mismatch' }
-          $asset = @($metadata.assets | Where-Object name -eq "GameGauge-$env:RELEASE_VERSION-Setup.exe")
-          $hash = (Get-FileHash "build/package/GameGauge-$env:RELEASE_VERSION-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($asset.Count -ne 1 -or $asset[0].digest -ne "sha256:$hash") { throw 'Uploaded digest mismatch' }
+          foreach ($file in $files) {
+            $asset = @($metadata.assets | Where-Object name -eq $file)
+            $hash = (Get-FileHash "build/package/$file" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($asset.Count -ne 1 -or $asset[0].digest -ne "sha256:$hash") { throw "Uploaded digest mismatch for $file" }
+          }
           gh api --method PATCH "repos/$env:GH_REPO/releases/$($metadata.id)" -F draft=false -f make_latest=legacy
           if ($LASTEXITCODE) { throw 'Release publication failed' }

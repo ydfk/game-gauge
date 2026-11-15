@@ -33,7 +33,7 @@ add_library(gauge_metrics STATIC
 target_include_directories(gauge_metrics PRIVATE third_party/presentmon)
 target_link_libraries(gauge_metrics PUBLIC gauge_common dxgi pdh psapi powrprof dwmapi setupapi)
 add_executable(GameGauge WIN32
-  src/host/components.cpp
+  src/host/components.cpp src/host/saves.cpp
   src/host/main.cpp src/host/application.cpp src/host/ipc_server.cpp src/host/updater.cpp src/host/obs.cpp
   src/hud/overlay.cpp src/hud/pause_notice.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
 target_link_libraries(GameGauge PRIVATE gauge_metrics d3d11 d2d1 dwrite dcomp dwmapi comctl32 winhttp bcrypt crypt32)
@@ -44,8 +44,8 @@ add_executable(GameGauge.CpuProbe src/diagnostics/cpu_temperature_probe.cpp)
 target_include_directories(GameGauge.CpuProbe PRIVATE src)
 target_link_libraries(GameGauge.CpuProbe PRIVATE bcrypt advapi32)
 add_executable(GameGauge.Settings WIN32
-  src/settings/main.cpp src/settings/window.cpp src/settings/controls.cpp src/settings/window_chrome.cpp src/settings/pages.cpp src/settings/simple_pages.cpp src/settings/history_page.cpp src/settings/game_identity.cpp src/host/ipc_server.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
-target_link_libraries(GameGauge.Settings PRIVATE gauge_common d2d1 dwrite windowscodecs comdlg32 d3d11 dcomp dwmapi)
+  src/settings/main.cpp src/settings/window.cpp src/settings/controls.cpp src/settings/window_chrome.cpp src/settings/pages.cpp src/settings/simple_pages.cpp src/settings/history_page.cpp src/settings/game_identity.cpp src/settings/saves_page.cpp src/settings/saves_records.cpp src/settings/saves_dialog.cpp src/host/ipc_server.cpp src/hud/renderer.cpp src/hud/layout.cpp src/host/app.rc)
+target_link_libraries(GameGauge.Settings PRIVATE gauge_common d2d1 dwrite windowscodecs comdlg32 d3d11 dcomp dwmapi credui)
 target_link_options(GameGauge.Settings PRIVATE /MANIFEST:NO)
 add_executable(GameGauge.RenderProbe WIN32 tests/render_probe.cpp)
 target_link_libraries(GameGauge.RenderProbe PRIVATE d3d11 dxgi)
@@ -70,6 +70,19 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/build/setup/payload.rc")
 endif()
 add_test(NAME core_contracts COMMAND GameGauge.Tests)
 add_test(NAME ipc_contracts COMMAND GameGauge.IpcTests)
+option(GAMEGAUGE_BUILD_SAVES "构建存档工作进程" ON)
+if(GAMEGAUGE_BUILD_SAVES)
+  find_program(GAMEGAUGE_POWERSHELL NAMES pwsh powershell REQUIRED)
+  set(saves_build "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-saves.ps1")
+  add_custom_target(GameGauge.Saves ALL
+    COMMAND "${GAMEGAUGE_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "${saves_build}"
+      -BuildDir "${CMAKE_BINARY_DIR}" -Configuration "$<CONFIG>" -Version "${GAMEGAUGE_VERSION}"
+    VERBATIM)
+  add_dependencies(GameGauge GameGauge.Saves)
+  add_test(NAME saves_rust_contracts COMMAND "${GAMEGAUGE_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File
+    "${saves_build}" -BuildDir "${CMAKE_BINARY_DIR}" -Configuration "$<CONFIG>"
+    -Version "${GAMEGAUGE_VERSION}" -Test)
+endif()
 set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGauge.Settings GameGauge.RenderProbe GameGauge.Tests GameGauge.IpcTests GameGauge.SetupPreview
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 

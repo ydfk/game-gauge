@@ -8,7 +8,9 @@ $taskStep = [scriptblock]::Create($taskBody)
 $taskFolder = Join-Path $taskRoot ('build/runtime-test/release-workflow-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path "$taskFolder/build/package" -Force | Out-Null
 [IO.File]::WriteAllText("$taskFolder/build/package/GameGauge-1.2.3-Setup.exe", 'isolated release test payload')
+[IO.File]::WriteAllText("$taskFolder/build/package/GameGauge-1.2.3-win-x64.zip", 'isolated portable test payload')
 $taskHash = (Get-FileHash -LiteralPath "$taskFolder/build/package/GameGauge-1.2.3-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+$taskPortableHash = (Get-FileHash -LiteralPath "$taskFolder/build/package/GameGauge-1.2.3-win-x64.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$taskFolder/build/package/SHA256SUMS.txt", "$taskHash  GameGauge-1.2.3-Setup.exe")
 $taskPrevious = @{}; foreach ($taskKey in @('RELEASE_TAG','RELEASE_VERSION','GH_REPO')) { $taskPrevious[$taskKey] = [Environment]::GetEnvironmentVariable($taskKey) }
 $taskLocation = Get-Location
@@ -34,14 +36,18 @@ function gh {
     if ($taskArguments[0] -eq 'api' -and $taskArguments[1] -eq 'repos/example/repo/releases/42') {
         $taskDigest = if ($script:taskScenario -eq 'bad-digest') { 'sha256:invalid' } else { "sha256:$script:taskHash" }
         $taskTag = if ($script:taskScenario -eq 'wrong-tag') { 'v9.9.9' } else { 'v1.2.3' }
-        return (@{id=42;draft=$true;tag_name=$taskTag;assets=@(@{name='GameGauge-1.2.3-Setup.exe';digest=$taskDigest})} | ConvertTo-Json -Depth 5 -Compress)
+        $taskPortableDigest = if ($script:taskScenario -eq 'bad-portable') { 'sha256:invalid' } else { "sha256:$script:taskPortableHash" }
+        return (@{id=42;draft=$true;tag_name=$taskTag;assets=@(
+            @{name='GameGauge-1.2.3-Setup.exe';digest=$taskDigest},
+            @{name='GameGauge-1.2.3-win-x64.zip';digest=$taskPortableDigest}
+        )} | ConvertTo-Json -Depth 5 -Compress)
     }
     throw "Unexpected gh command: $($taskArguments -join ' ')"
 }
 try {
     Set-Location -LiteralPath $taskFolder
     $env:RELEASE_TAG='v1.2.3'; $env:RELEASE_VERSION='1.2.3'; $env:GH_REPO='example/repo'
-    foreach ($taskCase in @('existing-draft','new-draft','published','bad-digest','wrong-tag','invalid-id')) {
+    foreach ($taskCase in @('existing-draft','new-draft','published','bad-digest','bad-portable','wrong-tag','invalid-id')) {
         $script:taskScenario=$taskCase; $script:taskCalls=[Collections.Generic.List[string]]::new()
         $taskFailure=$null
         try { & $taskStep | Out-Null } catch { $taskFailure=$_.Exception.Message }

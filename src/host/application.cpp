@@ -11,7 +11,7 @@
 namespace gauge {
 namespace {
 constexpr UINT tray_message = WM_APP + 1, action_message = WM_APP + 2;
-enum Action : UINT { open_settings = 100, toggle_hud, toggle_pause, edit_hud, reset_stats, export_data, quit_app, save_position };
+enum Action : UINT { open_settings = 100, toggle_hud, toggle_pause, edit_hud, reset_stats, export_data, quit_app, save_position, backup_now, open_saves };
 HICON make_icon() {
     HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
     HBITMAP bitmap = CreateCompatibleBitmap(screen, 32, 32), mask = CreateBitmap(32, 32, 1, 1, nullptr);
@@ -59,12 +59,13 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
         warning_ = "部分热键被其他软件占用，请使用托盘菜单";
     SetTimer(window_, 1, 250, nullptr);
     if (timed_exit_) SetTimer(window_, 2, timed_exit_, nullptr);
+    saves_ = std::make_unique<Saves>();
     ipc_ = std::make_unique<IpcServer>([this](const Json& command) { return request(command); });
 }
 Application::~Application() {
     if (auto settings = FindWindowW(L"GameGauge.Settings", nullptr)) PostMessageW(settings, WM_CLOSE, 0, 0);
-    ipc_.reset(); overlay_.reset();
-    for (int hotkey = 1; hotkey <= 3; ++hotkey) UnregisterHotKey(window_, hotkey);
+    ipc_.reset(); overlay_.reset(); saves_.reset();
+    for (int hotkey = 1; hotkey <= 4; ++hotkey) UnregisterHotKey(window_, hotkey);
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1; Shell_NotifyIconW(NIM_DELETE, &tray);
     if (icon_) DestroyIcon(icon_);
     if (window_) DestroyWindow(window_);
@@ -86,12 +87,13 @@ void Application::add_tray() {
         if (!Shell_NotifyIconW(NIM_MODIFY, &tray)) SetTimer(window_, 3, 2000, nullptr);
     } else KillTimer(window_, 3);
 }
-void Application::settings() {
+void Application::settings(bool backup_page) {
     auto path = executable_dir() / L"GameGauge.Settings.exe";
     if (!std::filesystem::exists(path)) {
         MessageBoxW(window_, L"尚未构建设置窗口。请运行 scripts/build-core.ps1。", L"游戏仪表", MB_OK | MB_ICONINFORMATION); return;
     }
-    const auto argument = L"--host-pid " + std::to_wstring(GetCurrentProcessId()) + L" --data-dir \"" + data_dir().wstring() + L"\"";
+    const auto argument = L"--host-pid " + std::to_wstring(GetCurrentProcessId()) + L" --data-dir \"" + data_dir().wstring() + L"\"" +
+        (backup_page ? L" --saves" : L"");
     ShellExecuteW(window_, L"open", path.c_str(), argument.c_str(), executable_dir().c_str(), SW_SHOWNORMAL);
 }
 void Application::menu() {
@@ -105,10 +107,54 @@ void Application::menu() {
     AppendMenuW(menu, MF_STRING, reset_stats, L"重置本次统计\tCtrl+Alt+Shift+F8");
     AppendMenuW(menu, MF_STRING, export_data, L"导出当前会话 JSON");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, backup_now, (L"立即备份存档" +
+        (saves_hotkey_.empty() || saves_hotkey_failed_ ? std::wstring{} : L"\t" + wide(saves_hotkey_))).c_str());
+    AppendMenuW(menu, MF_STRING, open_saves, L"存档备份设置");
     AppendMenuW(menu, MF_STRING, open_settings, L"打开设置"); AppendMenuW(menu, MF_STRING, quit_app, L"退出");
     POINT cursor{}; GetCursorPos(&cursor); SetForegroundWindow(window_);
     TrackPopupMenu(menu, TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, window_, nullptr); DestroyMenu(menu);
     PostMessageW(window_, WM_NULL, 0, 0);
+}
+void Application::saves_notice(std::wstring message, bool error) {
+    NOTIFYICONDATAW notice{sizeof(notice)}; notice.hWnd = window_; notice.uID = 1; notice.uFlags = NIF_INFO;
+    wcscpy_s(notice.szInfoTitle, L"存档备份");
+    wcsncpy_s(notice.szInfo, message.c_str(), _TRUNCATE);
+    notice.dwInfoFlags = error ? NIIF_WARNING : NIIF_INFO;
+    Shell_NotifyIconW(NIM_MODIFY, &notice);
+}
+void Application::backup_from_tray() {
+    if (!saves_tray_job_.empty()) { saves_notice(L"上一次存档备份仍在处理。", false); return; }
+    const auto reply = saves_->request({{"command", "saves.backup.enqueue"}, {"shortcut", true}, {"request_id", new_request_id()}});
+    if (reply.value("ok", false)) saves_tray_job_ = reply["job_id"].get<std::string>();
+    else saves_notice(wide(reply.value("error", std::string("存档备份暂不可用"))), true);
+}
+void Application::refresh_saves() {
+    const auto status = saves_->request({{"command", "saves.host.status"}});
+    const auto desired = status.value("state", std::string{}) == "ready" ? status.value("hotkey", std::string{}) : std::string{};
+    if (desired != saves_hotkey_) {
+        UnregisterHotKey(window_, 4);
+        saves_hotkey_ = desired;
+        const auto key = saves_hotkey(desired);
+        saves_hotkey_failed_ = !key || (key->second && !RegisterHotKey(window_, 4, key->first, key->second));
+    }
+    if (saves_tray_job_.empty()) return;
+    const auto response = saves_->request({{"command", "saves.job.status"}, {"job_id", saves_tray_job_}});
+    const auto state = response.value("state", std::string{});
+    if (state == "running" || state == "queued") return;
+    saves_tray_job_.clear();
+    if (state == "succeeded") {
+        const auto result = response.value("result", Json::object());
+        saves_notice(wide(result.value("message", std::string("备份完成"))), false);
+        if (result.value("choose_target", false)) settings(true);
+    } else saves_notice(wide(response.value("error", std::string("存档备份失败"))), true);
+}
+void Application::quit_when_safe() {
+    if (!pending_exit_) {
+        pending_exit_ = true;
+        saves_->drain();
+    }
+    // 恢复事务结束后再退出，安装器可以继续等待程序和映像文件释放。
+    if (!saves_->restoring()) PostQuitMessage(0);
 }
 void Application::export_session() {
     auto directory = data_dir() / L"exports"; std::filesystem::create_directories(directory);
@@ -119,6 +165,11 @@ void Application::export_session() {
 Json Application::request(const Json& command) {
     if (!command.is_object() || command.value("version", 1) != 1) throw std::runtime_error("不支持的 IPC 协议");
     const auto action = command.value("command", std::string("status"));
+    if (action.starts_with("saves.")) {
+        auto response = saves_->request(command);
+        if (action == "saves.host.status") response["hotkey_conflict"] = saves_hotkey_failed_.load();
+        return response;
+    }
     if (action == "status") {
         std::lock_guard lock(mutex_);
         const auto snapshot = this->snapshot();
@@ -179,9 +230,12 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
     try {
         if (message == self->taskbar_created_ && self->taskbar_created_) { self->add_tray(); return 0; }
         if (message == tray_message) { if (lparam == WM_RBUTTONUP) self->menu(); else if (lparam == WM_LBUTTONUP || lparam == WM_LBUTTONDBLCLK) self->settings(); return 0; }
+        if (message == WM_CLOSE) { self->quit_when_safe(); return 0; }
         if (message == WM_TIMER) {
             if (wparam == 3) { self->add_tray(); return 0; }
-            if (wparam == 2) { PostQuitMessage(0); return 0; }
+            if (wparam == 2) { self->quit_when_safe(); return 0; }
+            if (self->pending_exit_) self->quit_when_safe();
+            self->refresh_saves();
             self->updater_.idle(self->sampler_.snapshot().target.pid != 0);
             if (auto edit_result = self->overlay_->take_edit_result()) {
                 if (*edit_result) {
@@ -216,11 +270,13 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
             return 0;
         }
         if (message == WM_DISPLAYCHANGE || message == WM_POWERBROADCAST) { self->sampler_.refresh_hardware(); self->sampler_.reset_statistics(); }
-        if (message == WM_HOTKEY) { PostMessageW(window, action_message, wparam == 1 ? toggle_hud : wparam == 2 ? edit_hud : reset_stats, 0); return 0; }
+        if (message == WM_HOTKEY) { PostMessageW(window, action_message, wparam == 1 ? toggle_hud : wparam == 2 ? edit_hud : wparam == 4 ? backup_now : reset_stats, 0); return 0; }
         if (message == WM_COMMAND || message == action_message) {
             const auto action = LOWORD(wparam); auto config = self->config();
             switch (action) {
             case open_settings: self->settings(); break;
+            case open_saves: self->settings(true); break;
+            case backup_now: self->backup_from_tray(); break;
             case toggle_hud: config.enabled = !config.enabled; self->update_config(config); break;
             case toggle_pause: config.paused = !config.paused; self->update_config(config); break;
             case edit_hud:
@@ -228,7 +284,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
                 self->overlay_->edit(!self->overlay_->editing()); break;
             case reset_stats: self->sampler_.reset_statistics(); break;
             case export_data: self->export_session(); break;
-            case quit_app: PostQuitMessage(0); break;
+            case quit_app: self->quit_when_safe(); break;
             }
             return 0;
         }

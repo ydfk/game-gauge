@@ -14,13 +14,13 @@ try {
     # 安装目录固定，服务程序不从用户可写目录运行。
     New-Item -ItemType Directory -Path $taskDestination -Force | Out-Null
     if ((Get-Item -LiteralPath $taskDestination).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw '安装目录不能是重解析点' }
+    . (Join-Path $taskPayload 'app/scripts/setup-processes.ps1')
+    Stop-GameGaugeProcesses -Directory $taskDestination
     $taskSensor = Get-Service 'GameGauge.Sensor' -ErrorAction SilentlyContinue
     if ($taskSensor) {
         Stop-Service 'GameGauge.Sensor' -Force
         $taskSensor.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(15))
     }
-    . (Join-Path $taskPayload 'app/scripts/setup-processes.ps1')
-    Stop-GameGaugeProcesses -Directory $taskDestination
     Set-InstallProgress 25
     Copy-Item -Path (Join-Path $taskPayload 'app/*') -Destination $taskDestination -Recurse -Force
     Set-InstallProgress 40

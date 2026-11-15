@@ -117,7 +117,7 @@ if __name__ == "__main__":
         (DATA / "gauge/config.json").write_text(json.dumps({"version": 1, "show_obs": True}))
         host = subprocess.Popen([str(BIN / "GameGauge.exe"), "--background", "--data-dir", str(DATA / "gauge")], env=env)
         try:
-            for state, label in (("idle", "未录制"), ("recording", "● 录制中"), ("paused", "Ⅱ 已暂停")):
+            for state, label in (("idle", "未录制"), ("recording", "录制中"), ("paused", "已暂停 · 记得恢复")):
                 mode = state
                 status = wait_state(state)
                 assert any(item["label"] == "OBS" and item["value"] == label for item in status["hud_preview"])

@@ -20,3 +20,9 @@ PresentMon MSI SHA-256：0cb43d2622356c1e277a77f840887f9000cea4e2d4236c0850922fc
 安装器使用默认受限 PawnIO，不启用 unrestricted 版本。温度模块固定且经校验，服务没有接受任意寄存器操作的 IPC。项目不修改、重新签名或单独抽出分发官方驱动。
 
 assets/logo-concept.png 是原创描述生成的概念图；assets/logo.svg 是本项目矢量图。LibreHardwareMonitor 仅用于算法对照，未加入产品。
+
+## 存档工作进程
+
+`saves/src/` 的存档 ZIP、Steam 检测、WebDAV 协议及调度代码源自项目所有者提供的留档 SaveKeep 0.2.0。构建将 Windows x64 的 Cargo 锁定依赖清单和各依赖的许可证收入 `licenses/saves/`。许可证索引见包内的 `licenses/saves/DEPENDENCIES.txt`。
+
+GameGauge 与 SaveKeep 的源码根目录在迁移时均无项目许可证文件。对外分发前需确认项目所有者授权及整包通知。

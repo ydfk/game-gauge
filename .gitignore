@@ -4,6 +4,7 @@ src/settings/packages/
 
 # CMake and compiled output
 /build/
+/saves/target/
 /bin/
 /obj/
 /.runtime/

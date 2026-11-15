@@ -90,8 +90,8 @@ void SettingsWindow::navigation(float width, float height) {
     line(52, 53, 59, 43, background, 2.5f);
     label(L"游戏仪表", 77, 35, 145, 27, heading_.Get(), white);
     label(L"GAMEGAUGE", 78, 61, 145, 18, small_.Get(), muted);
-    const wchar_t* names[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新"};
-    for (int i = 0; i < 5; ++i) {
+    const wchar_t* names[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新", L"存档备份"};
+    for (int i = 0; i < 6; ++i) {
         const float y = 132.f + i * 60;
         const auto rect = D2D1::RectF(16, y, 220, y + 48);
         if (page_ == i || hovered(rect)) fill(rect, page_ == i ? tint(blue, .12f) : panel, 8);
@@ -111,6 +111,10 @@ void SettingsWindow::navigation(float width, float height) {
         } else if (i == 3) {
             outline(D2D1::RectF(x, top, x + 16, top + 16), ink, 8);
             line(x + 8, top + 3, x + 8, top + 8, ink); line(x + 8, top + 8, x + 12, top + 10, ink);
+        } else if (i == 5) {
+            outline(D2D1::RectF(x, top + 3, x + 16, top + 15), ink, 3);
+            line(x + 1, top + 7, x + 15, top + 7, ink);
+            line(x + 6, top + 10, x + 10, top + 10, ink);
         } else {
             line(x + 8, top + 1, x + 8, top + 12, ink, 1.5f);
             line(x + 3, top + 7, x + 8, top + 12, ink, 1.5f); line(x + 8, top + 12, x + 13, top + 7, ink, 1.5f);
@@ -118,6 +122,7 @@ void SettingsWindow::navigation(float width, float height) {
         }
         label(names[i], 74, y + 11, 130, 24, body_.Get(), page_ == i ? white : muted);
         add(D2D1::RectF(16, y, 220, y + 48), [this, i](float) {
+            if (i == 5) { saves_open(); return; }
             page_ = i; focused_ = -1; if (page_ == 3) refresh(); InvalidateRect(window_, nullptr, FALSE);
         });
     }
