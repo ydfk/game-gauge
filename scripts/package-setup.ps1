@@ -26,7 +26,7 @@ Copy-Item -LiteralPath "$taskRoot/third_party/nlohmann/LICENSE.MIT" -Destination
 Copy-Item -LiteralPath "$taskRoot/third_party/presentmon/LICENSE.txt" -Destination "$taskApp/licenses/PresentMon.txt"
 Copy-Item -LiteralPath "$taskRoot/THIRD_PARTY_NOTICES.md" -Destination $taskApp
 Copy-Item -LiteralPath "$taskRoot/docs/saves.md" -Destination $taskApp
-& "$PSScriptRoot/package-saves-notices.ps1" -Destination "$taskApp/licenses/saves"
+Copy-Item -LiteralPath "$taskRoot/third_party/miniz/LICENSE" -Destination "$taskApp/licenses/miniz.txt"
 $taskDependencies = @(
     @{Source='PresentMon-2.6.0.msi';Name='PresentMon-2.6.0.msi';Hash='0CB43D2622356C1E277A77F840887F9000CEA4E2D4236C0850922FC204C6F820'},
     @{Source='PawnIO_setup-2.2.0.exe';Name='PawnIO_setup.exe';Hash='1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032'}

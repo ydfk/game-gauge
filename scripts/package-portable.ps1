@@ -34,7 +34,7 @@ Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/saves.md') -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $taskRoot 'scripts/install-presentmon.ps1') -Destination (Join-Path $taskPackage 'scripts/install-presentmon.ps1') -Force
 Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/nlohmann/LICENSE.MIT') -Destination (Join-Path $taskPackage 'licenses/nlohmann-json-MIT.txt') -Force
 Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/presentmon/LICENSE.txt') -Destination (Join-Path $taskPackage 'licenses/PresentMon-SDK-MIT.txt') -Force
-& "$PSScriptRoot/package-saves-notices.ps1" -Destination (Join-Path $taskPackage 'licenses/saves')
+Copy-Item -LiteralPath (Join-Path $taskRoot 'third_party/miniz/LICENSE') -Destination (Join-Path $taskPackage 'licenses/miniz.txt') -Force
 
 $taskManifest = [ordered]@{version=$Version;platform='Windows 11 x64';presentmon_service='separate signed Intel installation';files=@()}
 foreach ($taskName in $taskExecutables) {

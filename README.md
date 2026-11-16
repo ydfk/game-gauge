@@ -72,10 +72,9 @@ GPU 满载使用橙色表示负载状态。频率、功耗和风扇转速为蓝�
 
 Tag 自动发布和软件更新使用方法见 [发布与更新](docs/releasing.md)。设置中的“版本与更新”支持手动更新、自动检查，以及可选的游戏退出后自动下载安装。GitHub 构建自动注入仓库地址和 Tag 版本。
 
-在 Windows 11 x64、Visual Studio 2022 C++ 桌面工具和 Windows SDK 环境中运行。存档工作进程使用 `saves/rust-toolchain.toml` 固定的 Rust 1.97.1 MSVC 工具链。
+在 Windows 11 x64、Visual Studio 2022 C++ 桌面工具和 Windows SDK 环境中运行。CMake 同时构建 C++ 宿主与独立的存档工作进程。
 
 ```powershell
-rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
 .\build.cmd                  # 编译 Release 并运行核心测试
 .\build.cmd -Task Run        # 编译后打开程序
 .\build.cmd -Task Package    # 自动下载校验依赖并生成完整安装包

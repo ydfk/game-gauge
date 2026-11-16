@@ -23,6 +23,8 @@ assets/logo-concept.png 是原创描述生成的概念图；assets/logo.svg 是�
 
 ## 存档工作进程
 
-`saves/src/` 的存档 ZIP、Steam 检测、WebDAV 协议及调度代码源自项目所有者提供的留档 SaveKeep 0.2.0。构建将 Windows x64 的 Cargo 锁定依赖清单和各依赖的许可证收入 `licenses/saves/`。许可证索引见包内的 `licenses/saves/DEPENDENCIES.txt`。
+存档备份的格式、Steam 检测规则、WebDAV 协议和调度行为沿用项目所有者提供的留档 SaveKeep 0.2.0。当前应用代码位于 `src/saves/`。
+
+ZIP 实现静态链接 [miniz 3.1.2](https://github.com/richgel999/miniz/releases/tag/3.1.2)。源码固定于提交 `77d0dce8627735138c51770d1799a1ef48f2117d`，随仓库保存于 `third_party/miniz/`。MIT 授权文本随安装包和便携包收入 `licenses/miniz.txt`。
 
 GameGauge 与 SaveKeep 的源码根目录在迁移时均无项目许可证文件。对外分发前需确认项目所有者授权及整包通知。

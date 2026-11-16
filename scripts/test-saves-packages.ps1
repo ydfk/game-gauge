@@ -4,9 +4,6 @@ param(
     [string]$PreviousSetup
 )
 $ErrorActionPreference = 'Stop'
-if (Get-Process GameGauge,GameGauge.Settings,GameGauge.Saves -ErrorAction SilentlyContinue) {
-    throw '已有游戏仪表进程，请在独立会话执行升级验证。'
-}
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskTest = Join-Path $taskRoot ('build/runtime-test/upgrade-saves-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $taskTest | Out-Null
@@ -56,7 +53,7 @@ function Assert-SavesPackage([string]$Directory) {
         if ($taskEntry.name -in @('GameGauge.exe','GameGauge.Settings.exe','GameGauge.Saves.exe') -and
             $taskFile.VersionInfo.FileVersion -ne $taskManifest.version) { throw "版本不一致：$($taskEntry.name)" }
     }
-    if (!(Test-Path -LiteralPath (Join-Path $Directory 'licenses/saves/DEPENDENCIES.txt'))) { throw '缺少 Rust 授权清单' }
+    if (!(Test-Path -LiteralPath (Join-Path $Directory 'licenses/miniz.txt'))) { throw '缺少 miniz 许可证' }
 }
 
 $taskNew = Expand-SetupPayload $Setup 'new-setup'
@@ -72,6 +69,9 @@ if ((Get-FileHash -LiteralPath $taskNewWorker).Hash -ne (Get-FileHash -LiteralPa
 Write-Output '安装包 PE 资源和便携 ZIP 的版本、工作进程和文件校验和：通过'
 
 if (!$PreviousSetup) { return }
+if (Get-Process GameGauge,GameGauge.Settings,GameGauge.Saves -ErrorAction SilentlyContinue) {
+    throw '已有游戏仪表进程，请在独立会话执行升级验证。'
+}
 $taskInstalled = Expand-SetupPayload $PreviousSetup 'mock-install'
 $taskData = Join-Path $taskTest 'user-data'
 New-Item -ItemType Directory -Path "$taskData/history","$taskData/saves" -Force | Out-Null

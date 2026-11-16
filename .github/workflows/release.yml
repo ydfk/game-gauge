@@ -33,11 +33,6 @@ jobs:
           "RELEASE_VERSION=$($env:RELEASE_TAG.Substring(1))" >> $env:GITHUB_ENV
       - name: Download verified dependencies
         run: ./scripts/fetch-release-deps.ps1
-      - name: Install pinned Rust
-        run: |
-          $toolchain = [regex]::Match((Get-Content saves/rust-toolchain.toml -Raw), 'channel = "([^"]+)"').Groups[1].Value
-          rustup toolchain install $toolchain --profile minimal --target x86_64-pc-windows-msvc
-          if ($LASTEXITCODE) { throw 'Rust toolchain installation failed' }
       - name: Build, test and package
         env:
           RELEASE_REPOSITORY: ${{ github.repository }}

@@ -8,7 +8,7 @@ endif()
 if(GAMEGAUGE_REPOSITORY AND NOT GAMEGAUGE_REPOSITORY MATCHES "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
   message(FATAL_ERROR "Invalid GitHub repository")
 endif()
-project(GameGauge VERSION ${GAMEGAUGE_VERSION} LANGUAGES CXX)
+project(GameGauge VERSION ${GAMEGAUGE_VERSION} LANGUAGES C CXX)
 configure_file(src/common/version.h.in generated/version.h @ONLY)
 configure_file(src/common/version_resource.rc.in generated/version_resource.rc @ONLY)
 include_directories("${CMAKE_BINARY_DIR}/generated")
@@ -20,7 +20,7 @@ if(NOT WIN32)
 endif()
 add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
 if(MSVC)
-  add_compile_options(/W4 /permissive- /utf-8 /EHsc)
+  add_compile_options(/W4 /utf-8 $<$<COMPILE_LANGUAGE:CXX>:/permissive-> $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 endif()
 add_library(gauge_common STATIC
   src/common/components.cpp
@@ -70,20 +70,34 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/build/setup/payload.rc")
 endif()
 add_test(NAME core_contracts COMMAND GameGauge.Tests)
 add_test(NAME ipc_contracts COMMAND GameGauge.IpcTests)
-option(GAMEGAUGE_BUILD_SAVES "构建存档工作进程" ON)
-if(GAMEGAUGE_BUILD_SAVES)
-  find_program(GAMEGAUGE_POWERSHELL NAMES pwsh powershell REQUIRED)
-  set(saves_build "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build-saves.ps1")
-  add_custom_target(GameGauge.Saves ALL
-    COMMAND "${GAMEGAUGE_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "${saves_build}"
-      -BuildDir "${CMAKE_BINARY_DIR}" -Configuration "$<CONFIG>" -Version "${GAMEGAUGE_VERSION}"
-    VERBATIM)
-  add_dependencies(GameGauge GameGauge.Saves)
-  add_test(NAME saves_rust_contracts COMMAND "${GAMEGAUGE_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File
-    "${saves_build}" -BuildDir "${CMAKE_BINARY_DIR}" -Configuration "$<CONFIG>"
-    -Version "${GAMEGAUGE_VERSION}" -Test)
+add_library(gauge_zip STATIC third_party/miniz/miniz.c third_party/miniz/miniz_tdef.c
+  third_party/miniz/miniz_tinfl.c third_party/miniz/miniz_zip.c)
+include(GenerateExportHeader)
+generate_export_header(gauge_zip BASE_NAME miniz EXPORT_FILE_NAME "${CMAKE_BINARY_DIR}/generated/miniz_export.h")
+target_include_directories(gauge_zip PUBLIC third_party/miniz)
+target_compile_definitions(gauge_zip PRIVATE _CRT_SECURE_NO_WARNINGS)
+if(MSVC)
+  target_compile_options(gauge_zip PRIVATE /W0)
 endif()
-set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGauge.Settings GameGauge.RenderProbe GameGauge.Tests GameGauge.IpcTests GameGauge.SetupPreview
+add_library(gauge_saves STATIC
+  src/saves/store.cpp src/saves/catalog.cpp src/saves/archive.cpp src/saves/dav.cpp
+  src/saves/cloud.cpp src/saves/migration.cpp src/saves/journal.cpp src/saves/worker.cpp)
+target_link_libraries(gauge_saves PUBLIC gauge_common gauge_zip PRIVATE bcrypt crypt32 winhttp xmllite shlwapi)
+add_executable(GameGauge.Saves.Tests tests/saves_tests.cpp)
+target_link_libraries(GameGauge.Saves.Tests PRIVATE gauge_saves)
+add_test(NAME saves_contracts COMMAND GameGauge.Saves.Tests)
+add_executable(GameGauge.Saves WIN32 src/saves/main.cpp src/saves/worker.rc)
+target_link_libraries(GameGauge.Saves PRIVATE gauge_saves)
+target_link_options(GameGauge.Saves PRIVATE /MANIFEST:NO)
+target_include_directories(GameGauge.Saves PRIVATE src/saves)
+add_dependencies(GameGauge GameGauge.Saves)
+add_executable(GameGauge.Saves.SupervisorTests tests/saves_supervisor_tests.cpp src/host/saves.cpp src/host/ipc_server.cpp)
+target_link_libraries(GameGauge.Saves.SupervisorTests PRIVATE gauge_saves)
+add_dependencies(GameGauge.Saves.SupervisorTests GameGauge.Saves)
+add_test(NAME saves_supervisor_contracts COMMAND GameGauge.Saves.SupervisorTests)
+set_tests_properties(saves_supervisor_contracts PROPERTIES SKIP_RETURN_CODE 77)
+set_target_properties(GameGauge GameGauge.Diagnostics GameGauge.CpuProbe GameGauge.Settings GameGauge.RenderProbe
+  GameGauge.Tests GameGauge.IpcTests GameGauge.Saves GameGauge.Saves.Tests GameGauge.Saves.SupervisorTests GameGauge.SetupPreview
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # 需要交互式 Windows 桌面，手动执行此窗口生命周期回归。
