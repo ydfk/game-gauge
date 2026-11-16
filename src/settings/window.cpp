@@ -1,5 +1,6 @@
 #include "window.h"
 #include "theme.h"
+#include "popup_menu.h"
 #include "common/platform.h"
 #include "host/ipc_server.h"
 #include "version.h"
@@ -63,7 +64,9 @@ SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture,
     DeleteMenu(GetSystemMenu(window_, FALSE), SC_MINIMIZE, MF_BYCOMMAND);
     const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
     DwmSetWindowAttribute(window_, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
-    const COLORREF border = RGB(42, 59, 77);
+    const BOOL dark = TRUE;
+    DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    const COLORREF border = native_color(edge);
     DwmSetWindowAttribute(window_, DWMWA_BORDER_COLOR, &border, sizeof(border));
     const MARGINS margins{1, 1, 1, 1}; DwmExtendFrameIntoClientArea(window_, &margins);
     const auto scale = ui_scale(GetDpiForWindow(window_), work);
@@ -86,7 +89,7 @@ SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture,
         const DWRITE_TRIMMING trim{DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
         out->SetTrimming(&trim, ellipsis.Get());
     };
-    format(L"Microsoft YaHei UI", 28, DWRITE_FONT_WEIGHT_SEMI_BOLD, title_);
+    format(L"Microsoft YaHei UI", 29, DWRITE_FONT_WEIGHT_SEMI_BOLD, title_);
     format(L"Microsoft YaHei UI", 16, DWRITE_FONT_WEIGHT_SEMI_BOLD, heading_);
     format(L"Microsoft YaHei UI", 14, DWRITE_FONT_WEIGHT_NORMAL, body_);
     format(L"Microsoft YaHei UI", 12.5f, DWRITE_FONT_WEIGHT_NORMAL, small_);
@@ -94,6 +97,7 @@ SettingsWindow::SettingsWindow(HINSTANCE instance, DWORD host_pid, Json fixture,
     format(L"Consolas", 22, DWRITE_FONT_WEIGHT_NORMAL, data_);
     format(L"Microsoft YaHei UI", 13, DWRITE_FONT_WEIGHT_MEDIUM, button_format_);
     button_format_->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    motion_ = motion_enabled();
     refresh(); SetTimer(window_, 1, 1200, nullptr);
     if (!fixture_mode_) SetTimer(window_, 3, 150, nullptr);
     if (open_saves) saves_open();
@@ -176,12 +180,19 @@ void SettingsWindow::render_to_png(const std::wstring& path, int page) {
         history_tab_ = std::clamp(_wtoi(tab), 0, 3);
     }
     disk_details_ = GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_DISKS", disk, 16) > 0;
-    wchar_t dpi[16]{};
-    if (GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_DPI", dpi, 16)) {
-        snapshot_dpi_ = static_cast<UINT>(std::clamp(_wtoi(dpi), 96, 192));
-        const auto factor = std::min(snapshot_dpi_ / 96.f, 1.4f);
-        RECT size{0, 0, static_cast<LONG>(1164 * factor), static_cast<LONG>(770 * factor)};
-        SetWindowPos(window_, nullptr, 0, 0, size.right - size.left, size.bottom - size.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    wchar_t dpi[16]{}, dimensions[32]{};
+    const bool custom_dpi = GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_DPI", dpi, 16) != 0;
+    const bool custom_size = GetEnvironmentVariableW(L"GAMEGAUGE_SETTINGS_SIZE", dimensions, 32) != 0;
+    if (custom_dpi) snapshot_dpi_ = static_cast<UINT>(std::clamp(_wtoi(dpi), 96, 192));
+    if (custom_dpi || custom_size) {
+        const auto factor = std::min((snapshot_dpi_ ? snapshot_dpi_ : 96) / 96.f, 1.4f);
+        int width = static_cast<int>(1164 * factor), height = static_cast<int>(770 * factor);
+        int requested_width{}, requested_height{};
+        if (custom_size && swscanf_s(dimensions, L"%dx%d", &requested_width, &requested_height) == 2) {
+            width = requested_width; height = requested_height;
+        }
+        SetWindowPos(window_, nullptr, 0, 0, std::clamp(width, 720, 4096), std::clamp(height, 480, 2400),
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     RECT client{}; GetClientRect(window_, &client);
     const auto width = static_cast<UINT>(client.right), height = static_cast<UINT>(client.bottom);
@@ -190,6 +201,8 @@ void SettingsWindow::render_to_png(const std::wstring& path, int page) {
     Microsoft::WRL::ComPtr<IWICBitmap> bitmap;
     check(imaging->CreateBitmap(width, height, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &bitmap));
     check(factory_->CreateWicBitmapRenderTarget(bitmap.Get(), D2D1::RenderTargetProperties(), &target_));
+    target_->SetDpi(96.f, 96.f);
+    motion_ = false;
     paint();
     target_.Reset();
     Microsoft::WRL::ComPtr<IWICStream> stream;
@@ -208,47 +221,102 @@ void SettingsWindow::render_to_png(const std::wstring& path, int page) {
 void SettingsWindow::paint() {
     if (!target_) recreate_target();
     RECT client{}; GetClientRect(window_, &client);
-    scale_ = ui_scale(snapshot_dpi_ ? snapshot_dpi_ : GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
-    scale_ = std::max(.1f, std::min({scale_, client.right / 1164.f, client.bottom / 770.f}));
+    const auto now = GetTickCount64();
+    scale_ = snapshot_dpi_ ? std::min(snapshot_dpi_ / 96.f, 1.4f) :
+        ui_scale(GetDpiForWindow(window_), monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST)));
+    scale_ = std::max(scale_, std::min({1.8f, client.right / 1870.f, client.bottom / 1000.f}));
+    if (!nav_toggled_) compact_nav_ = client.right / scale_ < 1116.f;
+    scale_ = std::max(.1f, std::min(scale_, client.right / (compact_nav_ ? 980.f : 1116.f)));
     const float width = client.right / scale_, height = client.bottom / scale_;
+    const float desired = compact_nav_ ? 68.f : 216.f;
+    if (desired != sidebar_goal_) {
+        sidebar_from_ = sidebar_width_; sidebar_goal_ = desired;
+        sidebar_start_ = motion_ ? now : 0;
+        pressed_.reset();
+    }
+    const auto tween = [now](ULONGLONG start) {
+        if (!start) return 1.f;
+        const float rest = 1.f - std::min(1.f, static_cast<float>(now - start) / motion_ms);
+        return 1.f - rest * rest * rest;
+    };
+    const float side_progress = tween(sidebar_start_), page_progress = tween(page_start_);
+    sidebar_width_ = sidebar_from_ + (desired - sidebar_from_) * side_progress;
+    // 收起侧栏后，主区继续使用同一套页面坐标，命中区域同步变换。
+    content_shift_ = sidebar_width_ - 236.f;
+    const float page_width = width - content_shift_;
+    const float left = 272 + content_shift_;
+    const auto items = status_.value("components", Json::object()).value("items", Json::array());
+    const bool unhealthy = page_ < 4 && std::any_of(items.begin(), items.end(), [](const Json& item) {
+        const auto state = item.value("state", std::string{});
+        return state == "missing" || state == "stopped" || state == "error";
+    });
+    viewport_bottom_ = std::max(page_top + 38, height - (!error_.empty() || unhealthy ? 53.f : 13.f));
     hotspots_.clear();
-    target_->BeginDraw(); target_->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
+    const auto base = D2D1::Matrix3x2F::Scale(scale_, scale_);
+    target_->BeginDraw(); target_->SetTransform(base);
     target_->Clear(background);
+    const auto scene = D2D1::RectF(0, 0, width, height);
+    glow(target_.Get(), scene, D2D1::Point2F(width * .77f, 42), D2D1::SizeF(width * .64f, height * .82f), tint(accent, .15f));
+    glow(target_.Get(), scene, D2D1::Point2F(width * .18f, height * .85f), D2D1::SizeF(width * .44f, height * .49f), tint(blue, .062f));
     navigation(width, height);
     window_controls(width);
-    const wchar_t* page_titles[]{L"外观", L"监控项目", L"游戏与排除", L"游戏历史", L"版本与更新", L"存档备份"};
-    label(page_titles[page_], 272, 54, width - 420, 40, title_.Get(), white);
-    line(272, 122, width - 28, 122, edge);
+    label(page_names[page_], left, 70, width - left - 230, 48, title_.Get(), white);
+    const auto active_game = wide(status_.value("snapshot", Json::object())
+        .value("target", Json::object()).value("name", std::string{}));
+    if (!active_game.empty()) badge(active_game, D2D1::RectF(width - 234, 80, width - 28, 108), blue);
+    line(left, 120, width - 28, 120, ink_edge);
+    const auto viewport = D2D1::RectF(sidebar_width_ + 1, page_top, width - 21, viewport_bottom_);
+    target_->PushAxisAlignedClip(viewport, D2D1_ANTIALIAS_MODE_ALIASED);
+    page_offset_ = (1.f - page_progress) * 5.f;
+    target_->SetTransform(D2D1::Matrix3x2F::Translation(content_shift_, page_offset_ - scroll_) * base);
+    content_bottom_ = page_top; in_page_ = true;
     switch (page_) {
-    case 0: appearance_page(width); break;
-    case 1: metrics_page(width); break;
-    case 2: games_page(width); break;
-    case 3: history_page(width); break;
-    case 4: updates_page(width); break;
-    case 5: saves_page(width); break;
+    case 0: appearance_page(page_width); break;
+    case 1: metrics_page(page_width); break;
+    case 2: games_page(page_width); break;
+    case 3: history_page(page_width); break;
+    case 4: updates_page(page_width); break;
+    case 5: saves_page(page_width); break;
     }
+    in_page_ = false;
+    target_->SetTransform(base);
+    if (page_progress < 1) fill(viewport, tint(background, .57f * (1.f - page_progress)));
+    target_->PopAxisAlignedClip();
+    scroll_limit_ = std::max(0.f, content_bottom_ + 9.f - viewport_bottom_);
+    if (scroll_ > scroll_limit_) scroll_by(0);
     if (!error_.empty()) {
-        fill(D2D1::RectF(272, height - 39, width - 28, height - 7), tint(amber, .10f), 6);
-        label(L"提示：" + wide(error_), 284, height - 35, width - 324, 24, small_.Get(), amber);
-    } else if (page_ < 4) {
-        const auto items = status_.value("components", Json::object()).value("items", Json::array());
-        const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {
-            const auto state = item.value("state", std::string{});
-            return state == "missing" || state == "stopped" || state == "error";
-        });
-        if (unhealthy) {
-            label(L"部分采集组件异常，可能影响帧率或温度", 284, height - 35, width - 490, 24, small_.Get(), amber);
-            row_action(L"检查采集组件", D2D1::RectF(width - 168, height - 39, width - 28, height - 7),
-                [this](float) { page_ = 4; focused_ = -1; refresh(); });
-        }
+        badge(wide(error_), D2D1::RectF(left, height - 43, width - 28, height - 10), amber);
+    } else if (unhealthy) {
+        const auto banner = D2D1::RectF(left, height - 43, width - 28, height - 10);
+        fill(banner, tint(amber, .07f), control_radius);
+        outline(banner, tint(amber, .20f), control_radius);
+        label(L"部分采集组件异常，可能影响帧率或温度", left + 12, height - 41, width - left - 170, 30, small_.Get(), amber);
+        row_action(L"检查采集组件", D2D1::RectF(width - 162, height - 42, width - 31, height - 11),
+            [this](float) { select_page(4); }, true);
+    }
+    draw_scrollbar(width, viewport_bottom_);
+    if (sidebar_width_ < 180 && pointer_inside_ && pointer_.x < sidebar_width_ && hover_index_ >= 0) {
+        const bool exit = pointer_.y > height - 54;
+        const int nav = static_cast<int>((pointer_.y - 126) / 52);
+        if (exit || pointer_.y >= 126 && nav < static_cast<int>(std::size(page_names)))
+            badge(exit ? L"退出" : page_names[nav], D2D1::RectF(sidebar_width_ + 2, pointer_.y - 15,
+                sidebar_width_ + 105, pointer_.y + 15), lilac);
+        else if (pointer_.y >= 76 && pointer_.y <= 106)
+            badge(L"展开侧栏", D2D1::RectF(sidebar_width_ + 2, 76, sidebar_width_ + 105, 106), lilac);
     }
     if (focused_ >= 0 && focused_ < static_cast<int>(hotspots_.size())) {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-        check(target_->CreateSolidColorBrush(mint, &brush));
-        const auto rect = hotspots_[focused_].rect;
+        check(target_->CreateSolidColorBrush(lilac, &brush));
+        const auto& item = hotspots_[focused_];
+        const auto rect = item.rect;
+        if (item.page) target_->PushAxisAlignedClip(viewport, D2D1_ANTIALIAS_MODE_ALIASED);
         target_->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rect.left + 1, rect.top + 1,
             rect.right - 1, rect.bottom - 1), 9, 9), brush.Get(), 2);
+        if (item.page) target_->PopAxisAlignedClip();
     }
+    const bool animate = motion_ && (side_progress < 1 || page_progress < 1 || tween(hover_start_) < 1);
+    if (animate && !animation_timer_) { SetTimer(window_, 4, 16, nullptr); animation_timer_ = true; }
+    if (!animate && animation_timer_) { KillTimer(window_, 4); animation_timer_ = false; }
     auto hr = target_->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) { target_.Reset(); hwnd_target_.Reset(); }
     else check(hr);
@@ -267,11 +335,13 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
         if (const auto handled = chrome_message(message, wparam, lparam)) return *handled;
         if (const auto handled = interaction_message(message, wparam, lparam)) return *handled;
         switch (message) {
+        case WM_MEASUREITEM: if (measure_menu(window_, *reinterpret_cast<MEASUREITEMSTRUCT*>(lparam))) return TRUE; break;
+        case WM_DRAWITEM: if (draw_menu(window_, *reinterpret_cast<DRAWITEMSTRUCT*>(lparam))) return TRUE; break;
         case WM_GETMINMAXINFO: {
             auto info = reinterpret_cast<MINMAXINFO*>(lparam);
             const auto work = monitor_work(MonitorFromWindow(window_, MONITOR_DEFAULTTOPRIMARY));
             const auto scale = ui_scale(snapshot_dpi_ ? snapshot_dpi_ : GetDpiForWindow(window_), work);
-            info->ptMinTrackSize = POINT{static_cast<LONG>(950 * scale), static_cast<LONG>(720 * scale)}; return 0;
+            info->ptMinTrackSize = POINT{static_cast<LONG>(940 * scale), static_cast<LONG>(570 * scale)}; return 0;
         }
         case WM_SIZE:
             if (hwnd_target_) hwnd_target_->Resize(D2D1::SizeU(std::max(1u, static_cast<unsigned>(LOWORD(lparam))),
@@ -291,17 +361,23 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             SetWindowPos(window_, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
             InvalidateRect(window_, nullptr, FALSE); return 0;
         }
-        case open_saves_message: saves_open(); return 0;
+        case open_saves_message: select_page(5); return 0;
+        case WM_SETTINGCHANGE: motion_ = motion_enabled(); return 0;
         case WM_TIMER:
             if (wparam == 2) finish_history();
             else if (wparam == 3) saves_poll();
+            else if (wparam == 4) InvalidateRect(window_, nullptr, FALSE);
             else refresh();
             return 0;
         case WM_KEYDOWN:
             if (wparam == VK_TAB && !hotspots_.empty()) {
-                const auto size = static_cast<int>(hotspots_.size());
-                focused_ = (focused_ + (GetKeyState(VK_SHIFT) < 0 ? size - 1 : 1) + size) % size;
+                reveal_focus(GetKeyState(VK_SHIFT) < 0 ? -1 : 1);
                 InvalidateRect(window_, nullptr, FALSE); return 0;
+            }
+            if (wparam == VK_PRIOR || wparam == VK_NEXT || wparam == VK_HOME || wparam == VK_END) {
+                scroll_by(wparam == VK_PRIOR ? -viewport_bottom_ + page_top + 32 :
+                    wparam == VK_NEXT ? viewport_bottom_ - page_top - 32 : wparam == VK_HOME ? -scroll_limit_ : scroll_limit_);
+                return 0;
             }
             if (focused_ >= 0 && focused_ < static_cast<int>(hotspots_.size())) {
                 auto item = hotspots_[focused_];
@@ -309,7 +385,7 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
                     item.adjust(wparam == VK_LEFT ? -1 : 1); InvalidateRect(window_, nullptr, FALSE); return 0;
                 }
                 if (wparam == VK_RETURN || wparam == VK_SPACE) {
-                    if (!item.adjust) item.click((item.rect.left + item.rect.right) / 2);
+                    if (!item.adjust) item.click((item.rect.left + item.rect.right) / 2 - item.shift);
                     InvalidateRect(window_, nullptr, FALSE); return 0;
                 }
             }
@@ -317,7 +393,8 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
         case WM_SETCURSOR: {
             POINT cursor{}; GetCursorPos(&cursor); ScreenToClient(window_, &cursor);
             const float x = cursor.x / scale_, y = cursor.y / scale_;
-            for (const auto& item : hotspots_) if (x >= item.rect.left && x <= item.rect.right &&
+            for (const auto& item : hotspots_) if ((!item.page || y >= page_top && y <= viewport_bottom_) &&
+                x >= item.rect.left && x <= item.rect.right &&
                 y >= item.rect.top && y <= item.rect.bottom) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND)); return TRUE;
             }
@@ -328,7 +405,7 @@ LRESULT SettingsWindow::handle(UINT message, WPARAM wparam, LPARAM lparam) {
             try { paint(); } catch (...) { EndPaint(window_, &paint_info); throw; }
             EndPaint(window_, &paint_info); return 0;
         }
-        case WM_DESTROY: KillTimer(window_, 1); KillTimer(window_, 2); KillTimer(window_, 3); PostQuitMessage(0); return 0;
+        case WM_DESTROY: KillTimer(window_, 1); KillTimer(window_, 2); KillTimer(window_, 3); KillTimer(window_, 4); PostQuitMessage(0); return 0;
         }
     } catch (const std::exception& e) { error_ = e.what(); }
     return DefWindowProcW(window_, message, wparam, lparam);

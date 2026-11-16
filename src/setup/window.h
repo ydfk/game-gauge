@@ -29,6 +29,7 @@ private:
     void text(const std::wstring& value, D2D1_RECT_F rect, IDWriteTextFormat* format, D2D1_COLOR_F color,
         DWRITE_TEXT_ALIGNMENT alignment = DWRITE_TEXT_ALIGNMENT_LEADING);
     void fill(D2D1_RECT_F rect, D2D1_COLOR_F color, float radius = 0);
+    void outline(D2D1_RECT_F rect, D2D1_COLOR_F color, float radius = 14);
     void line(float x1, float y1, float x2, float y2, D2D1_COLOR_F color, float thickness = 1);
     void circle(float x, float y, float radius, D2D1_COLOR_F color, bool filled = true, float thickness = 1);
     void button(const wchar_t* caption, D2D1_RECT_F rect, int action, bool primary, bool enabled = true);
@@ -38,7 +39,9 @@ private:
     std::function<int()> read_progress_;
     int progress_{}, hovered_{}, focused_{1};
     DWORD result_{1};
-    bool running_{true}, allow_close_{}, keyboard_focus_{};
+    bool running_{true}, allow_close_{}, keyboard_focus_{}, animate_{};
+    float shown_progress_{}, shown_from_{};
+    ULONGLONG progress_start_{};
     float scale_{1};
     std::wstring destination_;
     Microsoft::WRL::ComPtr<ID2D1Factory> factory_;

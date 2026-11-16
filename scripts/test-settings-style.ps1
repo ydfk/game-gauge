@@ -38,7 +38,7 @@ $taskFixture.status.components = @{can_repair=$true;repair_state='idle';message=
     @{id='presentmon';name='帧率采集';state='ready';detail='正在接收游戏帧'},
     @{id='pawnio';name='温度驱动';state='ready';detail='服务运行中'},
     @{id='sensor';name='CPU 温度采集';state='ready';detail='正在接收温度读数'})}
-$taskEnvNames = @('GAMEGAUGE_SETTINGS_FIXTURE','GAMEGAUGE_SETTINGS_SNAPSHOT','GAMEGAUGE_SETTINGS_PAGE','GAMEGAUGE_SETTINGS_DPI','GAMEGAUGE_SETTINGS_HISTORY_ID','GAMEGAUGE_SETTINGS_HISTORY_TAB','GAMEGAUGE_SETTINGS_DISKS')
+$taskEnvNames = @('GAMEGAUGE_SETTINGS_FIXTURE','GAMEGAUGE_SETTINGS_SNAPSHOT','GAMEGAUGE_SETTINGS_PAGE','GAMEGAUGE_SETTINGS_DPI','GAMEGAUGE_SETTINGS_HISTORY_ID','GAMEGAUGE_SETTINGS_HISTORY_TAB','GAMEGAUGE_SETTINGS_DISKS','GAMEGAUGE_SETTINGS_SIZE')
 $taskPrevious = @{}; foreach ($taskName in $taskEnvNames) { $taskPrevious[$taskName] = [Environment]::GetEnvironmentVariable($taskName) }
 function Save-StyleFixture { [IO.File]::WriteAllText($taskFixturePath,($taskFixture | ConvertTo-Json -Depth 15),[Text.UTF8Encoding]::new($false)) }
 function Invoke-StyleShot([string]$Name,[int]$Page) {
@@ -100,7 +100,23 @@ try {
             Invoke-StyleShot "saves-dpi-$taskDpi-tab-$taskTab" 5
         }
     }
-    Write-Host "全部设置页、历史详情、OBS 四种状态与硬盘温度在隔离样本中渲染通过：$taskOutput"
+    foreach ($taskSize in @('940x570', '1920x1080', '2560x1440', '3840x2160')) {
+        $env:GAMEGAUGE_SETTINGS_SIZE = $taskSize
+        $env:GAMEGAUGE_SETTINGS_DPI = if ($taskSize -eq '3840x2160') { '144' } else { '96' }
+        $taskFixture.saves.tab = 1
+        Save-StyleFixture
+        foreach ($taskPage in 0..5) { Invoke-StyleShot "$taskSize-page-$taskPage" $taskPage }
+        $env:GAMEGAUGE_SETTINGS_HISTORY_ID = $taskRecord.id
+        try {
+            foreach ($taskTab in 0..1) {
+                $env:GAMEGAUGE_SETTINGS_HISTORY_TAB = [string]$taskTab
+                Invoke-StyleShot "$taskSize-history-$taskTab" 3
+            }
+        } finally {
+            Remove-Item Env:GAMEGAUGE_SETTINGS_HISTORY_ID,Env:GAMEGAUGE_SETTINGS_HISTORY_TAB
+        }
+    }
+    Write-Host "全部设置页、历史详情、OBS 四种状态、硬盘温度与窄窗/1080p/2K/4K 在隔离样本中渲染通过：$taskOutput"
 } finally {
     foreach ($taskName in $taskEnvNames) { [Environment]::SetEnvironmentVariable($taskName,$taskPrevious[$taskName]) }
 }

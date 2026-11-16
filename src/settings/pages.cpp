@@ -26,7 +26,7 @@ std::wstring text_field(const Json& object, const char* field) {
 D2D1::ColorF SettingsWindow::metric_color(const std::string& id) const {
     const auto snapshot = status_.value("snapshot", Json::object());
     const auto tone = id == "obs" ? obs_tone(snapshot.value("obs_state", std::string{})) : metric_tone(id, snapshot);
-    return D2D1::ColorF(tone_rgb(tone));
+    return reading_color(tone);
 }
 std::wstring SettingsWindow::metric_name(const std::string& id) const {
     auto it = std::find_if(all_metrics.begin(), all_metrics.end(), [&](const auto& item) { return item.first == id; });

@@ -1,6 +1,7 @@
 #include "renderer.h"
 #include "common/platform.h"
 #include "common/metric_style.h"
+#include "common/ui_theme.h"
 #include <dxgi1_2.h>
 #include <format>
 #include <stdexcept>
@@ -134,7 +135,7 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     check(context_->CreateSolidColorBrush(D2D1::ColorF(1.f, 1.f, 1.f), &brush));
     draw_hud_items(context_.Get(), write_.Get(), hud_items(s, config), config, width, height);
     if (config.graph && s.recent_frames.size() > 1) {
-        brush->SetColor(D2D1::ColorF(0x81C7EB));
+        brush->SetColor(theme::blue);
         const float spacing = (width - 12) / static_cast<float>(s.recent_frames.size() - 1);
         auto point = [&](size_t i) { return D2D1::Point2F(6 + spacing * i, height - 5 - static_cast<float>(std::min(s.recent_frames[i], 50.0) / 50 * 32)); };
         for (size_t i = 1; i < s.recent_frames.size(); ++i) context_->DrawLine(point(i - 1), point(i), brush.Get(), 1.2f);
@@ -142,21 +143,36 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     check(context_->EndDraw()); check(swap_->Present(1, 0));
 }
 void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height) {
+    using namespace theme;
+    const auto frame = D2D1::RectF(.5f, .5f, width - .5f, height - .5f);
+    gradient(target, frame, tint(panel_high, .98f), tint(background, .95f), card_radius);
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
-    check(target->CreateSolidColorBrush(D2D1::ColorF(0x080808, .93f), &brush));
-    target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 14, 14), brush.Get());
-    brush->SetColor(D2D1::ColorF(0xFF4040));
-    target->FillRectangle(D2D1::RectF(24, 0, width - 24, 3), brush.Get());
-    const auto draw = [&](const wchar_t* text, float font, float top, float bottom, unsigned color) {
+    check(target->CreateSolidColorBrush(tint(red, .48f), &brush));
+    target->DrawRoundedRectangle(D2D1::RoundedRect(frame, card_radius, card_radius), brush.Get());
+    const float center = width / 2;
+    const float symbol = std::min({24.f, height * .19f, width * .12f});
+    const auto icon = D2D1::RectF(center - symbol / 2, height * .11f, center + symbol / 2, height * .11f + symbol);
+    brush->SetColor(tint(red, .18f));
+    target->FillRoundedRectangle(D2D1::RoundedRect(icon, 6, 6), brush.Get());
+    brush->SetColor(red);
+    for (float x : {center - symbol * .14f, center + symbol * .14f})
+        target->DrawLine(D2D1::Point2F(x, icon.top + symbol * .27f), D2D1::Point2F(x, icon.bottom - symbol * .27f), brush.Get(), 2);
+    const auto dismiss = D2D1::RectF(center - std::min(112.f, center * .80f), height * .69f,
+        center + std::min(112.f, center * .80f), height * .9f);
+    gradient(target, dismiss, tint(accent, .28f), tint(accent, .09f), control_radius);
+    brush->SetColor(tint(lilac, .36f));
+    target->DrawRoundedRectangle(D2D1::RoundedRect(dismiss, control_radius, control_radius), brush.Get());
+    const auto draw = [&](const wchar_t* text, float font, float top, float bottom, D2D1_COLOR_F color) {
         Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
         check(write->CreateTextFormat(L"Microsoft YaHei UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, font, L"zh-CN", &format));
         format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER); format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        brush->SetColor(D2D1::ColorF(color));
-        target->DrawTextW(text, static_cast<UINT32>(wcslen(text)), format.Get(), D2D1::RectF(12, top, width - 12, bottom), brush.Get());
+        brush->SetColor(color);
+        target->DrawTextW(text, static_cast<UINT32>(wcslen(text)), format.Get(), D2D1::RectF(0, top, width, bottom), brush.Get(),
+            D2D1_DRAW_TEXT_OPTIONS_CLIP);
     };
-    draw(L"OBS 录屏暂停", std::min(48.f, width / 11), height * .15f, height * .62f, 0xFF4040);
-    draw(L"点击关闭本次提醒", std::min(16.f, width / 26), height * .65f, height * .93f, 0xE2E6EB);
+    draw(L"OBS 录屏暂停", std::min({42.f, width / 11, height * .23f}), height * .27f, height * .65f, white);
+    draw(L"点击关闭本次提醒", std::min({16.f, width / 26, height * .12f}), dismiss.top, dismiss.bottom, lilac);
 }
 void Renderer::render_notice(UINT dpi, SIZE size) {
     resize(size.cx, size.cy); context_->SetDpi(static_cast<float>(dpi), static_cast<float>(dpi));

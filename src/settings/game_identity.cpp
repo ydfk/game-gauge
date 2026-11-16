@@ -33,8 +33,8 @@ void SettingsWindow::game_identity(const Json& row, float x, float y, float widt
     if (identity.icon && SUCCEEDED(target_->CreateBitmapFromWicBitmap(identity.icon.Get(), &bitmap)))
         target_->DrawBitmap(bitmap.Get(), D2D1::RectF(x, y + 2, x + 36, y + 38));
     else {
-        fill(D2D1::RectF(x, y + 2, x + 36, y + 38), D2D1::ColorF(0x284758), 7);
-        label(L"G", x + 9, y + 5, 24, 28, heading_.Get(), theme::mint);
+        fill(D2D1::RectF(x, y + 2, x + 36, y + 38), theme::tint(theme::accent, .20f), theme::control_radius);
+        icon(2, x + 9, y + 10, theme::lilac);
     }
     auto name = row.value("display_name", identity.name);
     if (name.empty()) name = identity.name;

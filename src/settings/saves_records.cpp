@@ -29,8 +29,8 @@ bool confirmed(HWND owner, const wchar_t* message) {
 void SettingsWindow::saves_records(float width, bool cloud) {
     constexpr float left = 272;
     const float right = width - 28;
-    const float pane = right - 294;
-    const float top = cloud ? 378.f : 320.f;
+    const float pane = right - std::max(314.f, (right - left) * .34f);
+    const float top = cloud ? 393.f : 319.f;
     const bool busy = saves_request_.valid() || !saves_job_.empty();
     const auto& page = cloud ? saves_remote_rows_ : saves_rows_;
     const auto& record = cloud ? saves_remote_record_ : saves_record_;
@@ -42,19 +42,20 @@ void SettingsWindow::saves_records(float width, bool cloud) {
             saves_send(saves_target("saves.backup.enqueue"), [this](Json) { saves_list(); });
         }, true);
     }
-    label(cloud ? L"云端备份" : L"本地备份", left, top - 2, 160, 28, heading_.Get(), white);
-    label(std::format(L"{} 份", total), pane - 112, top - 2, 96, 28, body_.Get(), muted);
-    line(left, top + 32, pane - 16, top + 32, edge);
+    surface(D2D1::RectF(left, top, pane - 14, top + 330), true);
+    label(cloud ? L"云端备份" : L"本地备份", left + 15, top + 5, 160, 29, heading_.Get(), white);
+    label(std::format(L"{} 份", total), pane - 114, top + 5, 85, 29, mono_.Get(), muted);
+    line(left + 15, top + 40, pane - 29, top + 40, ink_edge);
     auto rows = page.value("records", Json::array());
     if (rows.empty()) label(cloud && page.empty() ? L"点击「浏览远端」加载备份。" : L"这个档案还没有备份。",
-        left, top + 47, pane - left - 16, 34, body_.Get(), muted);
-    float y = top + 40;
+        left + 15, top + 54, pane - left - 42, 34, body_.Get(), muted);
+    float y = top + 45;
     for (const auto& row : rows) {
         const auto row_id = row.value("id", std::string{});
-        auto rect = D2D1::RectF(left, y, pane - 16, y + 35);
+        const auto rect = D2D1::RectF(left + 12, y, pane - 26, y + 34);
         list_surface(rect, row_id == id || hovered(rect));
         const auto title = field(row, "title") + (row.value("locked", false) ? L"  ·  已保护" : L"");
-        label(title, left + 10, y + 2, pane - left - 205, 30, body_.Get(), white);
+        label(title, left + 20, y + 2, pane - left - 214, 30, body_.Get(), white);
         label(utc_date(row), pane - 180, y + 2, 150, 30, small_.Get(), muted);
         if (!busy) add(rect, [this, cloud, row, row_id](float) {
             if (cloud) { saves_remote_record_ = row; return; }
@@ -62,17 +63,17 @@ void SettingsWindow::saves_records(float width, bool cloud) {
             request["record_id"] = row_id;
             saves_send(std::move(request), [this](Json detail) { saves_record_ = std::move(detail.at("record")); });
         });
-        y += 40;
+        y += 37;
     }
-    const float nav = top + 282;
+    const float nav = top + 278;
     if (!busy && offset > 0)
-        button(L"上一页", D2D1::RectF(left, nav, left + 96, nav + 40), [this, offset, cloud](float) { saves_list(offset - 6, cloud); });
+        button(L"上一页", D2D1::RectF(left + 15, nav, left + 111, nav + 36), [this, offset, cloud](float) { saves_list(offset - 6, cloud); });
     if (!busy && page.contains("next") && page["next"].is_number())
-        button(L"下一页", D2D1::RectF(left + 106, nav, left + 202, nav + 40),
+        button(L"下一页", D2D1::RectF(left + 121, nav, left + 217, nav + 36),
             [this, next = page["next"].get<int>(), cloud](float) { saves_list(next, cloud); });
 
-    list_surface(D2D1::RectF(pane, top, right, 703));
-    const float x = pane + 14;
+    surface(D2D1::RectF(pane, top, right, top + 330));
+    const float x = pane + 16;
     label(id.empty() ? L"选择一份备份" : field(record, "title"), x, top + 8, right - x - 14, 31, heading_.Get(), white);
     if (id.empty()) return;
     const auto details = std::format(L"{} · {:.2f} MiB{}", trigger(record), record.value("bytes", 0.0) / (1024 * 1024),
@@ -100,8 +101,9 @@ void SettingsWindow::saves_records(float width, bool cloud) {
         return;
     }
     const bool locked = record.value("locked", false);
-    const auto left_button = [&](float y) { return D2D1::RectF(x, y, x + 126, y + 40); };
-    const auto right_button = [&](float y) { return D2D1::RectF(x + 136, y, right - 14, y + 40); };
+    const float mid = (pane + right) / 2;
+    const auto left_button = [&](float y) { return D2D1::RectF(x, y, mid - 5, y + 40); };
+    const auto right_button = [&](float y) { return D2D1::RectF(mid + 5, y, right - 16, y + 40); };
     button(L"改名和备注", left_button(top + 130), [this, action](float) {
         auto fields = saves_form(window_, L"编辑备份", {
             {L"名称", field(saves_record_, "title"), 200},
@@ -131,10 +133,15 @@ void SettingsWindow::saves_cloud(float width) {
     const bool automatic = cloud.value("automatic", false);
     const auto url = field(cloud, "url");
     const auto username = field(cloud, "user");
-    label(url.empty() ? L"尚未设置 WebDAV" : url, left, 251, right - left - 180, 29, body_.Get(), white);
-    label(automatic ? L"自动上传已启用" : L"自动上传已暂停", right - 164, 251, 164, 29, body_.Get(), muted);
+    surface(D2D1::RectF(left, 249, right, 379), true);
+    const float controls_left = left + 16, controls_right = right - 16;
+    const float step = std::min(150.f, (controls_right - controls_left + 10) / 5);
+    const auto control = [&](int i) { return D2D1::RectF(controls_left + step * i, 292, controls_left + step * (i + 1) - 10, 331); };
+    label(url.empty() ? L"尚未设置 WebDAV" : url, controls_left, 254, right - controls_left - 175, 29, body_.Get(), white);
+    badge(automatic ? L"自动上传已启用" : L"自动上传已暂停",
+        D2D1::RectF(right - 163, 257, controls_right, 282), automatic ? mint : muted);
     if (!busy) {
-        button(L"编辑连接", D2D1::RectF(left, 291, left + 130, 333), [this, url, username, automatic](float) {
+        button(L"编辑连接", control(0), [this, url, username, automatic](float) {
             auto fields = saves_form(window_, L"WebDAV 连接", {
                 {L"已存在的 HTTPS 目录", url, 2048},
                 {L"用户名", username, 512},
@@ -145,7 +152,7 @@ void SettingsWindow::saves_cloud(float width) {
                     saves_remote_rows_ = Json::object(); saves_remote_record_ = Json::object(); saves_refresh();
                 });
         });
-        if (!username.empty()) button(L"输入密码", D2D1::RectF(left + 141, 291, left + 271, 333),
+        if (!username.empty()) button(L"输入密码", control(1),
             [this, cloud, username](float) {
                 if (save_webdav_password(window_, field(cloud, "credential_target"), username)) {
                     saves_message_ = L"密码已存入 Windows 凭据管理器";
@@ -153,15 +160,15 @@ void SettingsWindow::saves_cloud(float width) {
                 }
             });
         if (!url.empty()) {
-            button(L"测试连接", D2D1::RectF(left + 282, 291, left + 412, 333),
+            button(L"测试连接", control(2),
                 [this](float) { saves_send({{"command", "saves.cloud.test.enqueue"}}); });
-            button(L"重试上传", D2D1::RectF(left + 423, 291, left + 553, 333),
+            button(L"重试上传", control(3),
                 [this](float) { saves_send({{"command", "saves.cloud.retry.enqueue"}}, [this](Json) { saves_refresh(); }); });
-            button(L"浏览远端", D2D1::RectF(right - 130, 291, right, 333),
+            button(L"浏览远端", D2D1::RectF(controls_right - step + 10, 292, controls_right, 331),
                 [this](float) { saves_list(0, true, true); }, true);
         }
     }
-    label(field(cloud, "status"), left, 340, right - left, 28, small_.Get(), muted);
+    label(field(cloud, "status"), controls_left, 340, controls_right - controls_left, 28, small_.Get(), muted);
     saves_records(width, true);
 }
 }

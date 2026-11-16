@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "common/ui_theme.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -55,11 +56,10 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
     if (width <= 0) return;
     const bool paused = group.status == "paused";
     const float height = layout.row_height;
-    const auto status_color = D2D1::ColorF(paused ? 0xFF4040 :
-        group.status == "recording" ? 0x50FF00 : 0xADB5BF);
-    // 连续黑色底板通过细分隔线分组，让读数保持清晰。
+    const auto status_color = paused ? theme::red : group.status == "recording" ? theme::mint : theme::muted;
+    // 共用一块背景，用细分隔线保持读数分组。
     if (left > 0) {
-        brush->SetColor(D2D1::ColorF(0xFFFFFF, .25f));
+        brush->SetColor(theme::tint(theme::lilac, .25f));
         const float separator = left - group_gap / 2;
         target->DrawLine(D2D1::Point2F(separator, 6), D2D1::Point2F(separator, height - 6), brush, 1);
     }
@@ -69,7 +69,7 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
         const auto& item = group.items[i]; const auto& source = *item.source;
         if (i) x += item_gap;
         if (item.label_width > 0) {
-            brush->SetColor(D2D1::ColorF(0xE8ECF0));
+            brush->SetColor(theme::white);
             target->DrawTextW(source.label.c_str(), static_cast<UINT32>(source.label.size()), layout.labels.Get(),
                 D2D1::RectF(x, 0, x + item.label_width + 2, height), brush);
             x += item.label_width + label_gap;
@@ -103,8 +103,12 @@ void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std:
     const Config& config, float width, float height) {
     const auto measured = layout(write, items, config);
     ComPtr<ID2D1SolidColorBrush> brush;
-    check(target->CreateSolidColorBrush(D2D1::ColorF(0x000000, static_cast<float>(config.opacity)), &brush));
-    target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, width, height), 4, 4), brush.Get());
+    const float alpha = static_cast<float>(config.opacity);
+    const auto backdrop = D2D1::RectF(.5f, .5f, width - .5f, height - .5f);
+    if (alpha > 0 && width > 1 && height > 1)
+        theme::gradient(target, backdrop, theme::tint(theme::sidebar, alpha), theme::tint(theme::background, alpha), 7);
+    check(target->CreateSolidColorBrush(theme::tint(theme::lilac, .18f * alpha), &brush));
+    if (alpha > 0 && width > 1 && height > 1) target->DrawRoundedRectangle(D2D1::RoundedRect(backdrop, 7, 7), brush.Get());
     const bool obs = !measured.groups.empty() && !measured.groups.back().status.empty();
     const auto count = measured.groups.size() - (obs ? 1 : 0);
     const float obs_width = obs ? std::min(width, measured.groups.back().width) : 0;

@@ -1,6 +1,7 @@
 #include "window.h"
 #include "saves_dialog.h"
 #include "theme.h"
+#include "popup_menu.h"
 #include "host/ipc_server.h"
 #include <format>
 
@@ -23,15 +24,6 @@ uint32_t app_id(const std::wstring& text) {
 }
 bool confirm(HWND owner, const wchar_t* message) {
     return MessageBoxW(owner, message, L"存档备份", MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) == IDOK;
-}
-int choose(HWND window, float scale, D2D1_RECT_F rect, const std::vector<std::wstring>& options) {
-    auto menu = CreatePopupMenu();
-    for (size_t i = 0; i < options.size(); ++i) AppendMenuW(menu, MF_STRING, i + 1, options[i].c_str());
-    POINT point{static_cast<LONG>(rect.left * scale), static_cast<LONG>(rect.bottom * scale)};
-    ClientToScreen(window, &point);
-    const auto item = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, 0, window, nullptr);
-    DestroyMenu(menu);
-    return item ? static_cast<int>(item) - 1 : -1;
 }
 }
 
@@ -135,42 +127,50 @@ void SettingsWindow::saves_page(float width) {
     const bool busy = saves_request_.valid() || !saves_job_.empty();
     auto action = [&](const wchar_t* title, D2D1_RECT_F rect, std::function<void(float)> click, bool primary = false) {
         if (busy) {
-            fill(rect, panel, 6);
-            text(title, rect, button_format_.Get(), muted);
+            badge(title, rect, primary ? lilac : muted);
         } else button(title, rect, std::move(click), primary);
     };
     const wchar_t* tabs[]{L"游戏与规则", L"备份库", L"云端"};
+    const auto strip = D2D1::RectF(left, 141, left + 417, 185);
+    fill(strip, tint(panel, .72f), control_radius);
+    outline(strip, edge, control_radius);
     for (int index = 0; index < 3; ++index) {
-        const float x = left + index * 140;
-        action(tabs[index], D2D1::RectF(x, 142, x + 130, 184), [this, index](float) {
-            saves_tab_ = index;
+        const float x = left + 4 + index * 137;
+        tab(tabs[index], D2D1::RectF(x, 145, x + 134, 181), [this, index](float) {
+            saves_tab_ = index; scroll_ = 0;
             if (index == 1) saves_list();
             if (index == 2) { saves_remote_rows_ = Json::object(); saves_remote_record_ = Json::object(); }
-        }, index == saves_tab_);
+        }, index == saves_tab_, !busy);
     }
     action(L"刷新", D2D1::RectF(right - 96, 142, right, 184), [this](float) { saves_refresh(); });
     if (saves_available_ && !saves_game_.empty()) {
         const auto game_button = D2D1::RectF(left, 200, left + 258, 242);
-        action(field(saves_game_, "name").append(L"  ▾").c_str(), game_button, [this, game_button](float) {
-            std::vector<std::wstring> names;
-            for (const auto& row : saves_games_) names.push_back(field(row, "name"));
-            const int index = choose(window_, scale_, game_button, names);
-            if (index < 0) return;
+        action(field(saves_game_, "name").append(L"  ▾").c_str(), game_button, [this, anchor = screen_rect(game_button)](float) {
+            std::vector<MenuOption> names;
+            for (const auto& row : saves_games_) names.push_back({field(row, "name"), row.value("selected", false)});
+            const int index = show_options(window_, scale_, anchor, names);
+            if (index < 0 || static_cast<size_t>(index) >= names.size()) return;
             saves_send({{"command", "saves.games.select"}, {"game_id", saves_games_[index]["game_id"]}},
                 [this](Json) { saves_remote_rows_ = Json::object(); saves_remote_record_ = Json::object(); saves_refresh(); });
         });
         const auto profile = field(saves_game_, "profile");
-        label(L"档案  " + (profile.empty() ? L"待配置" : profile), left + 278, 206, 380, 30, body_.Get(), muted);
+        label(L"档案  " + (profile.empty() ? L"待配置" : profile), left + 278, 206, right - left - 278, 30, body_.Get(), muted);
         if (saves_tab_ == 0) saves_section(width);
         if (saves_tab_ == 1) saves_records(width, false);
         if (saves_tab_ == 2) saves_cloud(width);
     } else {
-        label(busy ? L"正在读取存档配置…" : L"存档备份暂不可用", left, 218, right - left, 42, heading_.Get(), white);
+        surface(D2D1::RectF(left, 200, right, 343));
+        icon(5, left + 18, 246, lilac);
+        label(busy ? L"正在读取存档配置…" : L"存档备份暂不可用", left + 48, 235, right - left - 66, 43, heading_.Get(), white);
     }
     const auto feedback = busy ? L"正在处理存档任务…" : saves_message_;
     if (!feedback.empty()) {
-        fill(D2D1::RectF(left, 714, right, 750), tint(saves_error_ && !busy ? amber : blue, .10f), 6);
-        label(feedback, left + 12, 716, right - left - 24, 32, body_.Get(), saves_error_ && !busy ? amber : white);
+        const float y = std::max(content_bottom_ + 14, 357.f);
+        const auto ink = saves_error_ && !busy ? amber : blue;
+        const auto rect = D2D1::RectF(left, y, right, y + 36);
+        fill(rect, tint(ink, .08f), control_radius);
+        outline(rect, tint(ink, .22f), control_radius);
+        label(feedback, left + 13, y, right - left - 26, 36, body_.Get(), ink);
     }
 }
 
@@ -202,7 +202,7 @@ void SettingsWindow::saves_section(float width) {
     const auto settings = saves_game_.value("settings", Json::object());
     const auto save = field(settings, "save_dir");
     const auto backup = field(settings, "backup_dir");
-    list_surface(D2D1::RectF(left, 262, right, 466));
+    surface(D2D1::RectF(left, 262, right, 550), true);
     label(L"游戏存档目录", left + 18, 272, 148, 30, body_.Get(), muted);
     label(save.empty() ? L"请选择专用存档目录" : save, left + 176, 272, right - left - 194, 30, body_.Get(), white);
     label(L"备份根目录", left + 18, 308, 148, 30, body_.Get(), muted);
@@ -217,18 +217,19 @@ void SettingsWindow::saves_section(float width) {
     label((key.empty() ? L"已停用" : key) + (saves_hotkey_conflict_ ? L" · 已占用，请修改" : L""),
         left + 176, 380, right - left - 194, 30, body_.Get(), saves_hotkey_conflict_ ? amber : white);
     label(field(saves_state_, "automatic_status"), left + 18, 418, right - left - 36, 30, small_.Get(), muted);
+    for (float y : {304.f, 340.f, 376.f, 412.f, 466.f}) line(left + 16, y, right - 16, y, ink_edge);
     if (busy) return;
-    button(L"编辑备份规则", D2D1::RectF(left, 486, left + 156, 530), [this](float) { saves_configure(); }, true);
-    const auto slots_button = D2D1::RectF(left + 168, 486, left + 336, 530);
+    button(L"编辑备份规则", D2D1::RectF(left + 17, 486, left + 173, 530), [this](float) { saves_configure(); }, true);
+    const auto slots_button = D2D1::RectF(left + 185, 486, left + 353, 530);
     if (saves_game_.value("game_id", std::string{}) == "steam-4115450" && !saves_slots_.empty()) {
-        button(L"选择 Steam 账号", slots_button, [this, slots_button](float) {
-            std::vector<std::wstring> slots;
-            for (const auto& path : saves_slots_) slots.push_back(wide(path.get<std::string>()));
-            const int index = choose(window_, scale_, slots_button, slots);
-            if (index >= 0) saves_configure(slots[index]);
+        button(L"选择 Steam 账号", slots_button, [this, anchor = screen_rect(slots_button)](float) {
+            std::vector<MenuOption> slots;
+            for (const auto& path : saves_slots_) slots.push_back({wide(path.get<std::string>())});
+            const int index = show_options(window_, scale_, anchor, slots);
+            if (index >= 0 && static_cast<size_t>(index) < slots.size()) saves_configure(slots[index].title);
         });
     }
-    button(L"添加 Steam 游戏", D2D1::RectF(left + 348, 486, left + 512, 530), [this](float) {
+    button(L"添加 Steam 游戏", D2D1::RectF(left + 365, 486, left + 529, 530), [this](float) {
         auto fields = saves_form(window_, L"添加已安装的 Steam 游戏", {
             {L"Steam App ID", L"", 10},
             {L"游戏进程文件名（含 .exe）", L"", 120},
@@ -237,10 +238,10 @@ void SettingsWindow::saves_section(float width) {
         if (fields) saves_send({{"command", "saves.games.add"}, {"app_id", app_id((*fields)[0])},
             {"executable", utf8((*fields)[1])}, {"save_dir", utf8((*fields)[2])}}, [this](Json) { saves_refresh(); });
     });
-    line(left, 560, right, 560, edge);
-    label(L"从留档 SaveKeep 迁移", left, 579, 370, 30, heading_.Get(), white);
-    label(L"预览原库和冲突，再复制可导入的备份。", left, 613, 500, 28, body_.Get(), muted);
-    button(L"预览旧库", D2D1::RectF(right - 130, 588, right, 632), [this](float) {
+    surface(D2D1::RectF(left, 565, right, 657));
+    label(L"从留档 SaveKeep 迁移", left + 17, 576, right - left - 175, 30, heading_.Get(), white);
+    label(L"预览原库和冲突，再复制可导入的备份。", left + 17, 610, right - left - 175, 28, body_.Get(), muted);
+    button(L"预览旧库", D2D1::RectF(right - 147, 589, right - 17, 633), [this](float) {
         saves_send({{"command", "saves.migration.preview"}}, [this](Json result) {
             auto summary = std::format(L"发现 {} 份备份，{} 个档案，预计复制 {:.2f} MiB。\n跳过 {} 份重复备份，{} 处冲突，{} 处不可读。\n\n",
                 result.value("records", 0), result.value("profiles", 0), result.value("bytes_to_copy", 0.0) / (1024 * 1024),

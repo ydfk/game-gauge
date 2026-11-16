@@ -17,8 +17,8 @@ void SettingsWindow::window_controls(float width) {
     const auto color = theme::white;
     const auto maximize = D2D1::RectF(width - 108, 12, width - 64, 46);
     const auto close = D2D1::RectF(width - 60, 12, width - 16, 46);
-    if (chrome_hover_ == 1) fill(maximize, D2D1::ColorF(0x1B2B3C), 6);
-    if (chrome_hover_ == 2) fill(close, D2D1::ColorF(0xB93F51), 6);
+    if (chrome_hover_ == 1) fill(maximize, theme::panel_high, theme::control_radius);
+    if (chrome_hover_ == 2) fill(close, theme::tint(theme::red, .3f), theme::control_radius);
     const float x = width - 86, y = 29;
     const auto square = [&](float left, float top, float size) {
         line(left, top, left + size, top, color, 1.4f); line(left + size, top, left + size, top + size, color, 1.4f);
@@ -68,6 +68,10 @@ std::optional<LRESULT> SettingsWindow::chrome_message(UINT message, WPARAM wpara
         const float x = point.x / scale_, y = point.y / scale_, width = client.right / scale_;
         if (y >= 12 && y <= 46 && x >= width - 108 && x <= width - 64) return HTMAXBUTTON;
         if (y >= 12 && y <= 46 && x >= width - 60 && x <= width - 16) return HTCLIENT;
+        const bool expanded = sidebar_width_ >= 180;
+        const float toggle_top = expanded ? 17.f : 76.f;
+        if (y >= toggle_top && y <= toggle_top + 30 &&
+            x >= sidebar_width_ - (expanded ? 44 : 55) && x <= sidebar_width_ - (expanded ? 14 : 17)) return HTCLIENT;
         if (y < 120) return HTCAPTION;
         return HTCLIENT;
     }
