@@ -131,7 +131,7 @@ void SettingsWindow::appearance_page(float width) {
     rule(2, L"录屏与截图隐藏", L"捕获画面中不包含监控条", &Config::exclude_capture);
     rule(3, L"OLED 防烧屏", L"仅左右微移，最大偏移 4 像素", &Config::oled_protection);
     rule(4, L"OBS 暂停提醒（游戏内）", L"显示在游戏中央，点击关闭本次提醒", &Config::obs_pause_notice);
-    rule(5, L"OBS 暂停提醒（所在屏幕）", L"显示在 OBS 所在屏幕顶部", &Config::obs_screen_pause_notice);
+    rule(5, L"OBS 暂停提醒（所在屏幕）", L"默认下半屏居中，按住提示上部可拖动", &Config::obs_screen_pause_notice);
 }
 
 void SettingsWindow::metrics_page(float width) {

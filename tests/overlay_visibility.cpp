@@ -20,9 +20,11 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
         require(IsWindowVisible(notice.window()) && GetMonitorInfoW(expected, &monitor) &&
             GetWindowRect(notice.window(), &bounds), "screen reminder missing with HUD disabled");
         const auto& work = monitor.rcWork;
-        require(bounds.left >= work.left && bounds.right <= work.right && bounds.top >= work.top &&
-            bounds.bottom <= work.bottom && bounds.left == work.left + (work.right - work.left - (bounds.right - bounds.left)) / 2 &&
-            bounds.top - work.top <= MulDiv(16, GetDpiForWindow(obs), 96), "reminder must stay at the top of the OBS screen");
+        const LONG horizontal_space = (work.right - work.left) - (bounds.right - bounds.left);
+        const LONG vertical_space = (work.bottom - work.top) - (bounds.bottom - bounds.top);
+        require(bounds.left == work.left + (horizontal_space + 1) / 2 &&
+            bounds.top == work.top + (vertical_space * 3 + 2) / 4, "reminder must start in the lower part of the OBS screen");
+        return monitor.rcWork;
     };
     const auto first = MonitorFromWindow(obs, MONITOR_DEFAULTTONEAREST);
     verify_position(first);
@@ -41,16 +43,54 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
     }
     ShowWindow(obs, SW_SHOWMINNOACTIVE);
     require(IsIconic(obs), "could not minimize OBS fixture");
-    verify_position(second);
+    const auto work = verify_position(second);
+    const auto window = notice.window();
+    const auto position = [&]() {
+        RECT bounds{};
+        require(IsWindowVisible(window) && GetWindowRect(window, &bounds), "cannot locate visible screen reminder");
+        return bounds;
+    };
+
     RECT client{};
-    GetClientRect(notice.window(), &client);
-    SendMessageW(notice.window(), WM_LBUTTONUP, 0, MAKELPARAM(client.right / 2, client.bottom * 4 / 5));
+    GetClientRect(window, &client);
+    const POINT grip{client.right / 2, client.bottom / 4};
+    const auto dismiss_point = MAKELPARAM(client.right / 2, client.bottom * 4 / 5);
+    const auto before = position();
+    const auto foreground = GetForegroundWindow();
+    const LONG dx = (work.left - before.left) / 2, dy = (work.top - before.top) / 2;
+    require(dx || dy, "display is too small for the drag fixture");
+    SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(grip.x, grip.y));
+    SendMessageW(window, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(grip.x + dx, grip.y + dy));
+    const auto dragged = position();
+    require(dragged.left == before.left + dx && dragged.top == before.top + dy &&
+        GetForegroundWindow() == foreground, "drag must move the reminder without changing focus");
     notice.update_on_obs_screen(obs, true, config);
-    require(!IsWindowVisible(notice.window()), "screen dismissal must persist during current pause");
+    const auto refreshed = position();
+    require(EqualRect(&refreshed, &dragged), "refresh must preserve the position during drag");
+    SendMessageW(window, WM_LBUTTONUP, 0, dismiss_point);
+    require(IsWindowVisible(window) && GetCapture() != window, "finishing a drag must release capture and keep the reminder");
+
     notice.update_on_obs_screen(obs, false, config);
-    verify_position(second);
+    require(!IsWindowVisible(window), "resuming must hide screen reminder");
+    notice.update_on_obs_screen(obs, true, config);
+    const auto next_pause = position();
+    require(EqualRect(&next_pause, &dragged), "the next pause must keep the dragged position");
+
+    SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(grip.x, grip.y));
+    SendMessageW(window, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(work.left - dragged.left - 10, work.top - dragged.top - 10));
+    const auto edge = position();
+    require(edge.left == work.left && edge.top == work.top, "screen drag must stay within the OBS work area");
+    SendMessageW(window, WM_CANCELMODE, 0, 0);
+    require(GetCapture() != window, "cancelled drag must release capture");
+
+    SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, dismiss_point);
+    SendMessageW(window, WM_LBUTTONUP, 0, dismiss_point);
+    notice.update_on_obs_screen(obs, true, config);
+    require(!IsWindowVisible(window), "screen dismissal must persist during current pause");
     notice.update_on_obs_screen(obs, false, config);
-    require(!IsWindowVisible(notice.window()), "resuming must hide screen reminder");
+    notice.update_on_obs_screen(obs, true, config);
+    const auto after_dismissal = position();
+    require(EqualRect(&after_dismissal, &edge), "dismissing the reminder must keep its position for later pauses");
 }
 
 int main() {
