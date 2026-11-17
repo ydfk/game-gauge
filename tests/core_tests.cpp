@@ -19,11 +19,13 @@ void close(double actual, double expected, const char* message) { require(std::a
 void telemetry_regressions();
 void metric_style_contracts();
 void component_contracts();
+void updater_contracts();
 int main() {
     try {
         telemetry_regressions();
         metric_style_contracts();
         component_contracts();
+        updater_contracts();
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"obs_pause_notice", true}}))).obs_pause_notice, "OBS reminder setting must persist");
         const auto legacy_notice = gauge::config_from_json({{"obs_pause_notice", true}, {"obs_pause_hotkey", {{"modifiers", 6}, {"key", 121}}}});
         require(legacy_notice.obs_pause_notice && !legacy_notice.obs_screen_pause_notice &&

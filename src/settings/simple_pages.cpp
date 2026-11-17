@@ -292,16 +292,22 @@ void SettingsWindow::updates_page(float width) {
     const auto update = status_.value("update", Json::object());
     const auto state = update.value("state", std::string{});
     const bool available = state == "available", ready = state == "ready";
-    const bool busy = state == "checking" || state == "downloading" || state == "installing";
+    const bool busy = state == "checking" || state == "downloading" || state == "installing" || state == "waiting";
     surface(D2D1::RectF(left, 140, split - 7, 356), true);
     surface(D2D1::RectF(split + 7, 140, right, 356));
     label(L"当前版本", left + 17, 153, 160, 30, small_.Get(), muted);
     label(L"v" + wide(GAMEGAUGE_VERSION), left + 17, 188, split - left - 34, 43, title_.Get(), white);
     const auto action = D2D1::RectF(left + 17, 289, left + 168, 330);
-    if (busy) badge(state == "checking" ? L"检查中…" : state == "downloading" ? L"下载中…" : L"安装中…", action, muted);
-    else button(ready ? L"安装更新" : available ? L"下载更新" : L"检查更新", action,
-        [this, ready, available](float) { command(ready ? "install_update" : available ? "download_update" : "check_update"); }, true);
-    const auto status_ink = state == "error" ? amber : available || ready ? blue : muted;
+    if (busy) {
+        const wchar_t* progress = state == "checking" ? L"检查中…" : state == "downloading" ? L"下载中…" :
+            state == "waiting" ? L"等待游戏退出" : L"安装中…";
+        badge(progress, action, muted);
+    } else if (state == "unconfigured") {
+        badge(L"更新不可用", action, muted);
+    } else {
+        button(state == "error" ? L"重试更新" : L"一键更新", action, [this](float) { command("update_now"); }, true);
+    }
+    const auto status_ink = state == "error" ? amber : available || ready || state == "waiting" ? blue : muted;
     fill(D2D1::RectF(left + 18, 253, left + 24, 259), status_ink, 3);
     auto message = wide(update.value("message", std::string("尚未检查更新")));
     if (available) message = L"发现新版本 v" + wide(update.value("version", std::string{}));

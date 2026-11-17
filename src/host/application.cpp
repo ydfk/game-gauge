@@ -183,6 +183,7 @@ Json Application::request(const Json& command) {
     }
     if (action == "apply") { update_config(config_from_json(command.at("config"))); return {{"ok", true}}; }
     if (action == "check_update") { updater_.check(); return {{"ok", true}}; }
+    if (action == "update_now") { updater_.update(); return {{"ok", true}}; }
     if (action == "repair_components") { components_.repair(); return {{"ok", true}}; }
     if (action == "download_update") { updater_.download(); return {{"ok", true}}; }
     if (action == "install_update") { updater_.install(); return {{"ok", true}}; }
