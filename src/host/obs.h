@@ -1,10 +1,13 @@
 #pragma once
 #include "common/config.h"
+#include <windows.h>
 #include <mutex>
 #include <thread>
 #include <atomic>
 
 namespace gauge {
+HWND find_obs_main_window();
+
 // 只读取 OBS 状态，不改变用户的录制操作。
 class ObsMonitor {
 public:

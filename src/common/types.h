@@ -74,6 +74,7 @@ struct Snapshot {
 struct Config {
     bool show_obs{};
     bool obs_pause_notice{};
+    bool obs_screen_pause_notice{};
     bool check_updates{true};
     bool auto_update{};
     bool enabled{true};

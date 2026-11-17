@@ -2,6 +2,57 @@
 #include <iostream>
 #include <stdexcept>
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
+
+void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
+    gauge::PauseNotice notice(instance);
+    gauge::Config config;
+    config.enabled = false;
+    config.exclude_capture = false;
+    notice.update_on_obs_screen(obs, true, config);
+    require(!IsWindowVisible(notice.window()), "screen reminder must default off");
+    config.obs_screen_pause_notice = true;
+    notice.update_on_obs_screen(nullptr, true, config);
+    require(!IsWindowVisible(notice.window()), "screen reminder needs an OBS window");
+    const auto verify_position = [&](HMONITOR expected) {
+        notice.update_on_obs_screen(obs, true, config);
+        MONITORINFO monitor{sizeof(monitor)};
+        RECT bounds{};
+        require(IsWindowVisible(notice.window()) && GetMonitorInfoW(expected, &monitor) &&
+            GetWindowRect(notice.window(), &bounds), "screen reminder missing with HUD disabled");
+        const auto& work = monitor.rcWork;
+        require(bounds.left >= work.left && bounds.right <= work.right && bounds.top >= work.top &&
+            bounds.bottom <= work.bottom && bounds.left == work.left + (work.right - work.left - (bounds.right - bounds.left)) / 2 &&
+            bounds.top - work.top <= MulDiv(16, GetDpiForWindow(obs), 96), "reminder must stay at the top of the OBS screen");
+    };
+    const auto first = MonitorFromWindow(obs, MONITOR_DEFAULTTONEAREST);
+    verify_position(first);
+    HMONITOR second = first;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR monitor, HDC, LPRECT, LPARAM result) -> BOOL {
+        auto& other = *reinterpret_cast<HMONITOR*>(result);
+        if (monitor == other) return TRUE;
+        other = monitor;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&second));
+    if (first != second) {
+        MONITORINFO monitor{sizeof(monitor)};
+        require(GetMonitorInfoW(second, &monitor), "cannot locate second screen");
+        SetWindowPos(obs, nullptr, monitor.rcWork.left + 24, monitor.rcWork.top + 24, 480, 240, SWP_NOACTIVATE | SWP_NOZORDER);
+        verify_position(second);
+    }
+    ShowWindow(obs, SW_SHOWMINNOACTIVE);
+    require(IsIconic(obs), "could not minimize OBS fixture");
+    verify_position(second);
+    RECT client{};
+    GetClientRect(notice.window(), &client);
+    SendMessageW(notice.window(), WM_LBUTTONUP, 0, MAKELPARAM(client.right / 2, client.bottom * 4 / 5));
+    notice.update_on_obs_screen(obs, true, config);
+    require(!IsWindowVisible(notice.window()), "screen dismissal must persist during current pause");
+    notice.update_on_obs_screen(obs, false, config);
+    verify_position(second);
+    notice.update_on_obs_screen(obs, false, config);
+    require(!IsWindowVisible(notice.window()), "resuming must hide screen reminder");
+}
+
 int main() {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const auto instance = GetModuleHandleW(nullptr);
@@ -63,8 +114,9 @@ int main() {
         require(!IsWindowVisible(notice.window()), "pause reminder preference ignored");
         DestroyWindow(game); game = nullptr; overlay.update(snapshot, config);
         require(!IsWindowVisible(overlay.window()), "closed game must hide HUD");
+        test_obs_screen_notice(instance, cover);
         DestroyWindow(cover);
-        std::cout << "Foreground, background Z order, blur preference, minimize, restore, close passed\n";
+        std::cout << "HUD visibility and OBS game/screen reminders passed\n";
         return 0;
     } catch (const std::exception& error) {
         if (game) DestroyWindow(game);

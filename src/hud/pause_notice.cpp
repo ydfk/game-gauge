@@ -15,14 +15,13 @@ PauseNotice::~PauseNotice() {
     renderer_.reset(); if (window_) DestroyWindow(window_);
 }
 void PauseNotice::update(const Snapshot& s, const Config& config) {
-    const bool paused = s.obs_state == "paused";
-    if (!paused || !config.obs_pause_notice || pid_ != s.target.pid) dismissed_ = false;
-    if (paused && !paused_) dismissed_ = false;
-    paused_ = paused; pid_ = s.target.pid;
+    if (pid_ != s.target.pid) dismissed_ = false;
+    pid_ = s.target.pid;
+    if (!should_show(s.obs_state == "paused", config.obs_pause_notice)) return;
     const auto game = reinterpret_cast<HWND>(s.target.window);
     DWORD pid{}; if (game) GetWindowThreadProcessId(game, &pid);
     BOOL cloaked{}; if (game) DwmGetWindowAttribute(game, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    if (!config.enabled || !config.obs_pause_notice || !paused || dismissed_ || !s.game_confirmed ||
+    if (!config.enabled || !s.game_confirmed ||
         !s.target.foreground || !game || !IsWindow(game) || pid != s.target.pid || !IsWindowVisible(game) || IsIconic(game) || cloaked) {
         ShowWindow(window_, SW_HIDE);
         return;
@@ -33,19 +32,42 @@ void PauseNotice::update(const Snapshot& s, const Config& config) {
         ShowWindow(window_, SW_HIDE);
         return;
     }
-    const UINT dpi = GetDpiForWindow(game);
-    const SIZE size{std::min<LONG>(bounds.right, MulDiv(720, dpi, 96)),
-        std::min<LONG>(bounds.bottom, MulDiv(210, dpi, 96))};
+    OffsetRect(&bounds, origin.x, origin.y);
+    show(bounds, GetDpiForWindow(game), config.exclude_capture);
+}
+
+void PauseNotice::update_on_obs_screen(HWND obs_window, bool paused, const Config& config) {
+    if (!should_show(paused, config.obs_screen_pause_notice)) return;
+    MONITORINFO monitor{sizeof(monitor)};
+    if (!obs_window || !GetMonitorInfoW(MonitorFromWindow(obs_window, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        ShowWindow(window_, SW_HIDE);
+        return;
+    }
+    show(monitor.rcWork, GetDpiForWindow(obs_window), config.exclude_capture, true);
+}
+
+bool PauseNotice::should_show(bool paused, bool enabled) {
+    if (!paused || !enabled) dismissed_ = false;
+    if (paused && enabled && !dismissed_) return true;
+    ShowWindow(window_, SW_HIDE);
+    return false;
+}
+
+void PauseNotice::show(const RECT& bounds, UINT dpi, bool exclude_capture, bool align_top) {
+    const LONG width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
+    const SIZE size{std::min<LONG>(width, MulDiv(720, dpi, 96)),
+        std::min<LONG>(height, MulDiv(210, dpi, 96))};
     if (!dpi || size.cx <= 0 || size.cy <= 0) {
         ShowWindow(window_, SW_HIDE);
         return;
     }
-    SetWindowDisplayAffinity(window_, config.exclude_capture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+    SetWindowDisplayAffinity(window_, exclude_capture ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
     if (!renderer_) renderer_ = std::make_unique<Renderer>(window_);
     if (drawn_.cx != size.cx || drawn_.cy != size.cy || dpi_ != dpi) {
         renderer_->render_notice(dpi, size); drawn_ = size; dpi_ = dpi;
     }
-    SetWindowPos(window_, HWND_TOPMOST, origin.x + (bounds.right - size.cx) / 2, origin.y + (bounds.bottom - size.cy) / 2,
+    const LONG top = align_top ? std::min<LONG>(height - size.cy, MulDiv(16, dpi, 96)) : (height - size.cy) / 2;
+    SetWindowPos(window_, HWND_TOPMOST, bounds.left + (width - size.cx) / 2, bounds.top + top,
         size.cx, size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 LRESULT CALLBACK PauseNotice::procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {

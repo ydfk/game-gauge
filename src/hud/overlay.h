@@ -10,7 +10,7 @@ class Overlay {
 public:
     explicit Overlay(HINSTANCE instance);
     ~Overlay();
-    void update(const Snapshot& snapshot, const Config& config);
+    void update(const Snapshot& snapshot, const Config& config, HWND obs_window = nullptr);
     void edit(bool enabled);
     bool editing() const { return editing_; }
     std::optional<bool> take_edit_result() { return std::exchange(edit_result_, std::nullopt); }
@@ -24,6 +24,7 @@ private:
     static LRESULT CALLBACK procedure(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
     HWND window_{};
     std::unique_ptr<PauseNotice> pause_notice_;
+    std::unique_ptr<PauseNotice> obs_screen_notice_;
     std::unique_ptr<Renderer> renderer_;
     bool editing_{}, edit_placed_{}, capture_requested_{}, affinity_enabled_{};
     std::optional<bool> edit_result_;

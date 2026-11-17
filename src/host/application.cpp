@@ -52,7 +52,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
     overlay_ = std::make_unique<Overlay>(instance);
     updater_.configure(config_.check_updates, config_.auto_update);
-    obs_.configure(config_.show_obs || config_.obs_pause_notice);
+    obs_.configure(config_.show_obs || config_.obs_pause_notice || config_.obs_screen_pause_notice);
     add_tray();
     const auto mods = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
     if (!RegisterHotKey(window_, 1, mods, VK_F6) || !RegisterHotKey(window_, 2, mods, VK_F7) || !RegisterHotKey(window_, 3, mods, VK_F8))
@@ -77,7 +77,7 @@ void Application::update_config(Config next) {
     { std::lock_guard lock(mutex_); config_ = next; }
     sampler_.configure(std::move(next));
     const auto saved = config(); updater_.configure(saved.check_updates, saved.auto_update);
-    obs_.configure(saved.show_obs || saved.obs_pause_notice);
+    obs_.configure(saved.show_obs || saved.obs_pause_notice || saved.obs_screen_pause_notice);
 }
 void Application::add_tray() {
     NOTIFYICONDATAW tray{sizeof(tray)}; tray.hWnd = window_; tray.uID = 1;
@@ -247,7 +247,10 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
                 }
                 self->overlay_->edit(false);
             }
-            self->overlay_->update(self->snapshot(), self->config());
+            const auto snapshot = self->snapshot();
+            const auto config = self->config();
+            const HWND obs_window = config.obs_screen_pause_notice && snapshot.obs_state == "paused" ? find_obs_main_window() : nullptr;
+            self->overlay_->update(snapshot, config, obs_window);
             const auto component_status = self->components_.status(self->sampler_.snapshot());
             const auto items = component_status.value("items", Json::array());
             const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {

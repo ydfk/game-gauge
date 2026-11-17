@@ -54,6 +54,28 @@ void pause(std::stop_token stop, unsigned milliseconds) {
     for (unsigned i = 0; i < milliseconds && !stop.stop_requested(); i += 50) Sleep(50);
 }
 }
+HWND find_obs_main_window() {
+    HWND main{};
+    EnumWindows([](HWND window, LPARAM result) -> BOOL {
+        if (GetWindow(window, GW_OWNER)) return TRUE;
+        // OBS 主界面以固定的 OBS 前缀开头，避免将投影窗口认成主窗口。
+        wchar_t title[5]{};
+        if (GetWindowTextW(window, title, ARRAYSIZE(title)) != 4 || wcscmp(title, L"OBS ") != 0) return TRUE;
+        DWORD pid{};
+        GetWindowThreadProcessId(window, &pid);
+        UniqueHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+        if (!process) return TRUE;
+        wchar_t path[32768];
+        DWORD length = ARRAYSIZE(path);
+        if (!QueryFullProcessImageNameW(process.value, 0, path, &length)) return TRUE;
+        const auto* filename = wcsrchr(path, L'\\');
+        if (!filename || _wcsicmp(filename + 1, L"obs64.exe") != 0) return TRUE;
+        *reinterpret_cast<HWND*>(result) = window;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&main));
+    return main;
+}
+
 ObsMonitor::ObsMonitor() : worker_([this](std::stop_token stop) { run(stop); }) {}
 ObsMonitor::~ObsMonitor() { worker_.request_stop(); worker_.join(); }
 std::string ObsMonitor::state() const { std::lock_guard lock(mutex_); return state_; }

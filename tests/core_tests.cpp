@@ -26,8 +26,15 @@ int main() {
         component_contracts();
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"obs_pause_notice", true}}))).obs_pause_notice, "OBS reminder setting must persist");
         const auto legacy_notice = gauge::config_from_json({{"obs_pause_notice", true}, {"obs_pause_hotkey", {{"modifiers", 6}, {"key", 121}}}});
-        require(legacy_notice.obs_pause_notice && !gauge::config_json(legacy_notice).contains("obs_pause_hotkey"),
-            "loading a legacy shortcut must preserve the reminder and omit the retired field on save");
+        require(legacy_notice.obs_pause_notice && !legacy_notice.obs_screen_pause_notice &&
+            !gauge::config_json(legacy_notice).contains("obs_pause_hotkey"),
+            "legacy config must preserve the game reminder and leave the screen reminder off");
+        gauge::Config screen_notice;
+        require(!screen_notice.obs_screen_pause_notice, "screen reminder must default off");
+        screen_notice.obs_screen_pause_notice = true;
+        const auto saved_notice = gauge::config_from_json(gauge::config_json(screen_notice));
+        require(saved_notice.obs_screen_pause_notice && !saved_notice.obs_pause_notice,
+            "screen reminder must survive serialization independently of the game reminder");
         require(!gauge::config_from_json(gauge::Json::object()).oled_protection, "legacy configs leave OLED shift off");
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"oled_protection", true}}))).oled_protection,
             "OLED preference must survive serialization");

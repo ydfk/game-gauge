@@ -120,16 +120,18 @@ void SettingsWindow::appearance_page(float width) {
             [this, i](float) { config_.anchor = i; config_.margin_x = 0; config_.margin_y = 0; config_.preview = false; apply(); }, config_.anchor == i);
     }
     const auto rule = [&](int row, const wchar_t* title, const wchar_t* hint, bool Config::*setting) {
-        const float y = 477.f + row * 50;
+        const float row_height = 43;
+        const float y = 477.f + row * row_height;
         if (row) line(column + 17, y, right - 17, y, ink_edge);
-        toggle(title, hint, config_.*setting, D2D1::RectF(column + 3, y, right - 3, y + 50),
+        toggle(title, hint, config_.*setting, D2D1::RectF(column + 3, y, right - 3, y + row_height),
             [this, setting](float) { config_.*setting = !(config_.*setting); apply(); });
     };
     rule(0, L"游戏内监控", L"游戏启动后显示，退出后关闭", &Config::enabled);
     rule(1, L"切出游戏后隐藏", L"关闭后继续跟随游戏窗口", &Config::hide_on_blur);
     rule(2, L"录屏与截图隐藏", L"捕获画面中不包含监控条", &Config::exclude_capture);
     rule(3, L"OLED 防烧屏", L"仅左右微移，最大偏移 4 像素", &Config::oled_protection);
-    rule(4, L"OBS 暂停大字提醒", L"显示在游戏中央，点击关闭本次提醒", &Config::obs_pause_notice);
+    rule(4, L"OBS 暂停提醒（游戏内）", L"显示在游戏中央，点击关闭本次提醒", &Config::obs_pause_notice);
+    rule(5, L"OBS 暂停提醒（所在屏幕）", L"显示在 OBS 所在屏幕顶部", &Config::obs_screen_pause_notice);
 }
 
 void SettingsWindow::metrics_page(float width) {

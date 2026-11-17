@@ -36,8 +36,12 @@ int Overlay::dragged_y() const {
     RECT rect{}; GetWindowRect(window_, &rect);
     return std::max(0, MulDiv(rect.top - bounds_.top, 96, GetDpiForWindow(window_)));
 }
-void Overlay::update(const Snapshot& snapshot, const Config& config) {
-    try { pause_notice_->update(snapshot, config); }
+void Overlay::update(const Snapshot& snapshot, const Config& config, HWND obs_window) {
+    try {
+        pause_notice_->update(snapshot, config);
+        if (obs_window && !obs_screen_notice_) obs_screen_notice_ = std::make_unique<PauseNotice>(GetModuleHandleW(nullptr));
+        if (obs_screen_notice_) obs_screen_notice_->update_on_obs_screen(obs_window, snapshot.obs_state == "paused", config);
+    }
     catch (const std::exception& exception) { error_ = exception.what(); return; }
     if (affinity_enabled_ != config.exclude_capture || (!capture_requested_ && !capture_error_)) {
         affinity_enabled_ = config.exclude_capture;
