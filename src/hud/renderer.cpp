@@ -142,7 +142,14 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     }
     check(context_->EndDraw()); check(swap_->Present(1, 0));
 }
-void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height) {
+PauseNoticeButtons pause_notice_buttons(float width, float height) {
+    const float center = width / 2;
+    const float gap = std::min(width * .025f, height * .04f);
+    const float button_width = std::min(width * .43f, height * .84f);
+    return {D2D1::RectF(center - gap - button_width, height * .69f, center - gap, height * .9f),
+        D2D1::RectF(center + gap, height * .69f, center + gap + button_width, height * .9f)};
+}
+void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height, ObsResumeState resume_state) {
     using namespace theme;
     const auto frame = D2D1::RectF(.5f, .5f, width - .5f, height - .5f);
     gradient(target, frame, tint(panel_high, .98f), tint(background, .95f), card_radius);
@@ -157,28 +164,30 @@ void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float w
     brush->SetColor(red);
     for (float x : {center - symbol * .14f, center + symbol * .14f})
         target->DrawLine(D2D1::Point2F(x, icon.top + symbol * .27f), D2D1::Point2F(x, icon.bottom - symbol * .27f), brush.Get(), 2);
-    const auto dismiss = D2D1::RectF(center - std::min(112.f, center * .80f), height * .69f,
-        center + std::min(112.f, center * .80f), height * .9f);
-    gradient(target, dismiss, tint(accent, .28f), tint(accent, .09f), control_radius);
-    brush->SetColor(tint(lilac, .36f));
-    target->DrawRoundedRectangle(D2D1::RoundedRect(dismiss, control_radius, control_radius), brush.Get());
-    const auto draw = [&](const wchar_t* text, float font, float top, float bottom, D2D1_COLOR_F color) {
+    const auto buttons = pause_notice_buttons(width, height);
+    const bool pending = resume_state == ObsResumeState::pending;
+    const auto action_color = pending ? muted : accent;
+    gradient(target, buttons.resume, tint(action_color, .48f), tint(action_color, .23f), control_radius);
+    gradient(target, buttons.dismiss, tint(panel_high, .95f), tint(panel_high, .72f), control_radius);
+    const auto draw = [&](const wchar_t* text, float font, D2D1_RECT_F rect, D2D1_COLOR_F color) {
         Microsoft::WRL::ComPtr<IDWriteTextFormat> format;
         check(write->CreateTextFormat(L"Microsoft YaHei UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, font, L"zh-CN", &format));
         format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER); format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         brush->SetColor(color);
-        target->DrawTextW(text, static_cast<UINT32>(wcslen(text)), format.Get(), D2D1::RectF(0, top, width, bottom), brush.Get(),
-            D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        target->DrawTextW(text, static_cast<UINT32>(wcslen(text)), format.Get(), rect, brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
     };
-    draw(L"OBS 录屏暂停", std::min({42.f, width / 11, height * .23f}), height * .27f, height * .65f, white);
-    draw(L"点击关闭本次提醒", std::min({16.f, width / 26, height * .12f}), dismiss.top, dismiss.bottom, lilac);
+    draw(L"OBS 录屏暂停", std::min({42.f, width / 11, height * .23f}), D2D1::RectF(0, height * .27f, width, height * .65f), white);
+    const float button_font = std::min({16.f, (buttons.resume.right - buttons.resume.left) / 8, height * .12f});
+    const auto* resume_text = pending ? L"正在恢复…" : resume_state == ObsResumeState::failed ? L"恢复失败，重试" : L"继续录制";
+    draw(resume_text, button_font, buttons.resume, pending ? muted : white);
+    draw(L"关闭提醒", button_font, buttons.dismiss, lilac);
 }
-void Renderer::render_notice(UINT dpi, SIZE size) {
+void Renderer::render_notice(UINT dpi, SIZE size, ObsResumeState resume_state) {
     resize(size.cx, size.cy); context_->SetDpi(static_cast<float>(dpi), static_cast<float>(dpi));
     const float width = size.cx * 96.f / dpi, height = size.cy * 96.f / dpi;
     context_->BeginDraw(); context_->Clear(D2D1::ColorF(0, 0, 0, 0));
-    draw_pause_notice(context_.Get(), write_.Get(), width, height);
+    draw_pause_notice(context_.Get(), write_.Get(), width, height, resume_state);
     check(context_->EndDraw()); check(swap_->Present(1, 0));
 }
 }

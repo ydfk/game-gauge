@@ -1,10 +1,26 @@
 #include "hud/overlay.h"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 void require(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
 
+LPARAM button_point(HWND window, bool resume) {
+    RECT client{};
+    require(GetClientRect(window, &client), "cannot find pause notice buttons");
+    const auto buttons = gauge::pause_notice_buttons(static_cast<float>(client.right), static_cast<float>(client.bottom));
+    const auto& rect = resume ? buttons.resume : buttons.dismiss;
+    return MAKELPARAM(std::lround((rect.left + rect.right) / 2), std::lround((rect.top + rect.bottom) / 2));
+}
+
+void click(HWND window, LPARAM point) {
+    SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, point);
+    SendMessageW(window, WM_LBUTTONUP, 0, point);
+}
+
 void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
-    gauge::PauseNotice notice(instance);
+    int resumes{};
+    gauge::PauseNotice notice(instance, [&] { ++resumes; });
     gauge::Config config;
     config.enabled = false;
     config.exclude_capture = false;
@@ -21,9 +37,10 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
             GetWindowRect(notice.window(), &bounds), "screen reminder missing with HUD disabled");
         const auto& work = monitor.rcWork;
         const LONG horizontal_space = (work.right - work.left) - (bounds.right - bounds.left);
-        const LONG vertical_space = (work.bottom - work.top) - (bounds.bottom - bounds.top);
+        const LONG height = work.bottom - work.top, notice_height = bounds.bottom - bounds.top;
+        const LONG top = std::clamp<LONG>(std::lround(height * .8 - notice_height * .5), 0, height - notice_height);
         require(bounds.left == work.left + (horizontal_space + 1) / 2 &&
-            bounds.top == work.top + (vertical_space * 3 + 2) / 4, "reminder must start in the lower part of the OBS screen");
+            bounds.top == work.top + top, "reminder center must start at 80 percent of the OBS work area");
         return monitor.rcWork;
     };
     const auto first = MonitorFromWindow(obs, MONITOR_DEFAULTTONEAREST);
@@ -54,7 +71,8 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
     RECT client{};
     GetClientRect(window, &client);
     const POINT grip{client.right / 2, client.bottom / 4};
-    const auto dismiss_point = MAKELPARAM(client.right / 2, client.bottom * 4 / 5);
+    const auto dismiss_point = button_point(window, false);
+    const auto resume_point = button_point(window, true);
     const auto before = position();
     const auto foreground = GetForegroundWindow();
     const LONG dx = (work.left - before.left) / 2, dy = (work.top - before.top) / 2;
@@ -67,8 +85,16 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
     notice.update_on_obs_screen(obs, true, config);
     const auto refreshed = position();
     require(EqualRect(&refreshed, &dragged), "refresh must preserve the position during drag");
-    SendMessageW(window, WM_LBUTTONUP, 0, dismiss_point);
-    require(IsWindowVisible(window) && GetCapture() != window, "finishing a drag must release capture and keep the reminder");
+    SendMessageW(window, WM_LBUTTONUP, 0, resume_point);
+    require(IsWindowVisible(window) && GetCapture() != window && resumes == 0, "finishing a drag must not trigger a button");
+    click(window, resume_point);
+    require(resumes == 1 && IsWindowVisible(window), "screen notice must request resume and wait for OBS");
+    notice.update_on_obs_screen(obs, true, config, gauge::ObsResumeState::pending);
+    click(window, resume_point);
+    require(resumes == 1, "pending resume must disable additional clicks");
+    notice.update_on_obs_screen(obs, true, config, gauge::ObsResumeState::failed);
+    click(window, resume_point);
+    require(resumes == 2, "a failed resume must be retryable");
 
     notice.update_on_obs_screen(obs, false, config);
     require(!IsWindowVisible(window), "resuming must hide screen reminder");
@@ -83,10 +109,9 @@ void test_obs_screen_notice(HINSTANCE instance, HWND obs) {
     SendMessageW(window, WM_CANCELMODE, 0, 0);
     require(GetCapture() != window, "cancelled drag must release capture");
 
-    SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, dismiss_point);
-    SendMessageW(window, WM_LBUTTONUP, 0, dismiss_point);
+    click(window, dismiss_point);
     notice.update_on_obs_screen(obs, true, config);
-    require(!IsWindowVisible(window), "screen dismissal must persist during current pause");
+    require(!IsWindowVisible(window) && resumes == 2, "screen dismissal must persist without resuming");
     notice.update_on_obs_screen(obs, false, config);
     notice.update_on_obs_screen(obs, true, config);
     const auto after_dismissal = position();
@@ -124,7 +149,8 @@ int main() {
         require(!IsWindowVisible(overlay.window()), "minimized game must hide HUD");
         ShowWindow(game, SW_SHOWNOACTIVATE); overlay.update(snapshot, config);
         require(IsWindowVisible(overlay.window()), "restored game must restore HUD");
-        gauge::PauseNotice notice(instance);
+        int resumes{};
+        gauge::PauseNotice notice(instance, [&] { ++resumes; });
         config.obs_pause_notice = true; snapshot.obs_state = "paused"; snapshot.target.foreground = true;
         notice.update(snapshot, config);
         require(IsWindowVisible(notice.window()), "OBS pause notice missing");
@@ -140,10 +166,13 @@ int main() {
         SendMessageW(notice.window(), WM_CLOSE, 0, 0);
         SendMessageW(notice.window(), WM_LBUTTONUP, 0, MAKELPARAM(12, 12));
         require(IsWindowVisible(notice.window()), "only the notice dismissal area may close the reminder");
-        SendMessageW(notice.window(), WM_LBUTTONUP, 0,
-            MAKELPARAM((bounds.right - bounds.left) / 2, (bounds.bottom - bounds.top) * 4 / 5));
+        const auto game_focus = GetForegroundWindow();
+        click(notice.window(), button_point(notice.window(), true));
+        require(resumes == 1 && IsWindowVisible(notice.window()) && GetForegroundWindow() == game_focus,
+            "game notice must request resume without stealing focus");
+        click(notice.window(), button_point(notice.window(), false));
         notice.update(snapshot, config);
-        require(!IsWindowVisible(notice.window()), "dismissal must persist during current pause");
+        require(!IsWindowVisible(notice.window()) && resumes == 1, "dismissal must persist without resuming");
         snapshot.obs_state = "recording"; notice.update(snapshot, config);
         require(!IsWindowVisible(notice.window()), "recording must hide pause notice");
         snapshot.obs_state = "paused"; notice.update(snapshot, config);

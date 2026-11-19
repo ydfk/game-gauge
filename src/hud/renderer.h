@@ -12,11 +12,14 @@ struct HudItem { std::wstring label, value; D2D1_COLOR_F color; std::wstring gro
 std::vector<HudItem> hud_items(const Snapshot& snapshot, const Config& config);
 D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config);
 void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config, float width, float height);
-void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height);
+struct PauseNoticeButtons { D2D1_RECT_F resume, dismiss; };
+PauseNoticeButtons pause_notice_buttons(float width, float height);
+void draw_pause_notice(ID2D1RenderTarget* target, IDWriteFactory* write, float width, float height,
+    ObsResumeState resume_state = ObsResumeState::ready);
 class Renderer {
 public:
     explicit Renderer(HWND window);
-    void render_notice(UINT dpi, SIZE size);
+    void render_notice(UINT dpi, SIZE size, ObsResumeState resume_state);
     SIZE measure(const Snapshot& snapshot, const Config& config, UINT dpi);
     void render(const Snapshot& snapshot, const Config& config, UINT dpi, SIZE size);
 private:

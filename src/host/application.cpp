@@ -50,7 +50,7 @@ Application::Application(HINSTANCE instance, Config config, bool show, uint32_t 
     icon_ = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON, 32, 32, 0));
     if (!icon_) icon_ = make_icon();
     taskbar_created_ = RegisterWindowMessageW(L"TaskbarCreated");
-    overlay_ = std::make_unique<Overlay>(instance);
+    overlay_ = std::make_unique<Overlay>(instance, [this] { obs_.resume_recording(); });
     updater_.configure(config_.check_updates, config_.auto_update);
     obs_.configure(config_.show_obs || config_.obs_pause_notice || config_.obs_screen_pause_notice);
     add_tray();
@@ -251,7 +251,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
             const auto snapshot = self->snapshot();
             const auto config = self->config();
             const HWND obs_window = config.obs_screen_pause_notice && snapshot.obs_state == "paused" ? find_obs_main_window() : nullptr;
-            self->overlay_->update(snapshot, config, obs_window);
+            self->overlay_->update(snapshot, config, obs_window, self->obs_.resume_state());
             const auto component_status = self->components_.status(self->sampler_.snapshot());
             const auto items = component_status.value("items", Json::array());
             const bool unhealthy = std::any_of(items.begin(), items.end(), [](const Json& item) {

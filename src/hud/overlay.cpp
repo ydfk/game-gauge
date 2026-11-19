@@ -7,14 +7,14 @@
 #include <algorithm>
 
 namespace gauge {
-Overlay::Overlay(HINSTANCE instance) {
+Overlay::Overlay(HINSTANCE instance, std::function<void()> resume_obs) : resume_obs_(std::move(resume_obs)) {
     WNDCLASSW cls{}; cls.hInstance = instance; cls.lpszClassName = L"GameGauge.Overlay";
     cls.lpfnWndProc = procedure; cls.hCursor = LoadCursorW(nullptr, IDC_ARROW); RegisterClassW(&cls);
     window_ = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP,
         cls.lpszClassName, L"游戏仪表 · 顶部监控", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance, this);
     if (!window_) throw std::runtime_error(error_text(GetLastError()));
     renderer_ = std::make_unique<Renderer>(window_);
-    pause_notice_ = std::make_unique<PauseNotice>(instance);
+    pause_notice_ = std::make_unique<PauseNotice>(instance, resume_obs_);
 }
 Overlay::~Overlay() { renderer_.reset(); if (window_) DestroyWindow(window_); }
 void Overlay::edit(bool enabled) {
@@ -36,11 +36,11 @@ int Overlay::dragged_y() const {
     RECT rect{}; GetWindowRect(window_, &rect);
     return std::max(0, MulDiv(rect.top - bounds_.top, 96, GetDpiForWindow(window_)));
 }
-void Overlay::update(const Snapshot& snapshot, const Config& config, HWND obs_window) {
+void Overlay::update(const Snapshot& snapshot, const Config& config, HWND obs_window, ObsResumeState resume_state) {
     try {
-        pause_notice_->update(snapshot, config);
-        if (obs_window && !obs_screen_notice_) obs_screen_notice_ = std::make_unique<PauseNotice>(GetModuleHandleW(nullptr));
-        if (obs_screen_notice_) obs_screen_notice_->update_on_obs_screen(obs_window, snapshot.obs_state == "paused", config);
+        pause_notice_->update(snapshot, config, resume_state);
+        if (obs_window && !obs_screen_notice_) obs_screen_notice_ = std::make_unique<PauseNotice>(GetModuleHandleW(nullptr), resume_obs_);
+        if (obs_screen_notice_) obs_screen_notice_->update_on_obs_screen(obs_window, snapshot.obs_state == "paused", config, resume_state);
     }
     catch (const std::exception& exception) { error_ = exception.what(); return; }
     if (affinity_enabled_ != config.exclude_capture || (!capture_requested_ && !capture_error_)) {

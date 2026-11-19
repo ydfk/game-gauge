@@ -49,6 +49,12 @@ struct Socket {
             if (type == WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE) return Json::parse(result);
         }
     }
+    Json request(const char* type, const char* id) {
+        send({{"op", 6}, {"d", {{"requestType", type}, {"requestId", id}}}});
+        auto reply = receive();
+        require(reply.at("op") == 7 && reply.at("d").at("requestId") == id);
+        return std::move(reply.at("d"));
+    }
 };
 void pause(std::stop_token stop, unsigned milliseconds) {
     for (unsigned i = 0; i < milliseconds && !stop.stop_requested(); i += 50) Sleep(50);
@@ -79,8 +85,17 @@ HWND find_obs_main_window() {
 ObsMonitor::ObsMonitor() : worker_([this](std::stop_token stop) { run(stop); }) {}
 ObsMonitor::~ObsMonitor() { worker_.request_stop(); worker_.join(); }
 std::string ObsMonitor::state() const { std::lock_guard lock(mutex_); return state_; }
+ObsResumeState ObsMonitor::resume_state() const { std::lock_guard lock(mutex_); return resume_state_; }
+void ObsMonitor::resume_recording() {
+    std::lock_guard lock(mutex_);
+    if (enabled_ && state_ == "paused") resume_state_ = ObsResumeState::pending;
+}
 void ObsMonitor::configure(bool enabled) { enabled_ = enabled; if (!enabled) publish("off"); }
-void ObsMonitor::publish(std::string state) { std::lock_guard lock(mutex_); state_ = std::move(state); }
+void ObsMonitor::publish(std::string state) {
+    std::lock_guard lock(mutex_);
+    state_ = enabled_ ? std::move(state) : "off";
+    if (state_ != "paused") resume_state_ = ObsResumeState::ready;
+}
 void ObsMonitor::run(std::stop_token stop) {
     while (!stop.stop_requested()) {
         if (!enabled_) { publish("off"); pause(stop, 100); continue; }
@@ -113,11 +128,19 @@ void ObsMonitor::run(std::stop_token stop) {
             socket.send({{"op", 1}, {"d", identify}});
             require(socket.receive().at("op") == 2);
             while (!stop.stop_requested() && enabled_) {
-                socket.send({{"op", 6}, {"d", {{"requestType", "GetRecordStatus"}, {"requestId", "gamegauge-record"}}}});
-                const auto reply = socket.receive();
-                require(reply.at("op") == 7 && reply.at("d").at("requestId") == "gamegauge-record" && reply.at("d").at("requestStatus").at("result") == true);
-                const auto& data = reply.at("d").at("responseData");
+                const auto reply = socket.request("GetRecordStatus", "gamegauge-record");
+                require(reply.at("requestStatus").at("result") == true);
+                const auto& data = reply.at("responseData");
                 publish(!data.at("outputActive").get<bool>() ? "idle" : data.at("outputPaused").get<bool>() ? "paused" : "recording");
+                if (!stop.stop_requested() && enabled_ && resume_state() == ObsResumeState::pending) {
+                    const auto result = socket.request("ResumeRecord", "gamegauge-resume");
+                    std::lock_guard lock(mutex_);
+                    if (resume_state_ == ObsResumeState::pending) {
+                        const bool resumed = result.at("requestStatus").at("result").get<bool>();
+                        resume_state_ = resumed ? ObsResumeState::ready : ObsResumeState::failed;
+                        if (resumed) state_ = "recording";
+                    }
+                }
                 pause(stop, 750);
             }
         } catch (...) { publish(enabled_ ? "disconnected" : "off"); }

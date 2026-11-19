@@ -53,6 +53,8 @@ struct Target {
     std::string path;
     bool foreground{};
 };
+enum class ObsResumeState { ready, pending, failed };
+
 struct Snapshot {
     std::string obs_state{"disconnected"};
     uint64_t timestamp_ms{};
