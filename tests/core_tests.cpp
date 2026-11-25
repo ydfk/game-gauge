@@ -38,6 +38,11 @@ int main() {
         require(saved_notice.obs_screen_pause_notice && !saved_notice.obs_pause_notice,
             "screen reminder must survive serialization independently of the game reminder");
         require(!gauge::config_from_json(gauge::Json::object()).oled_protection, "legacy configs leave OLED shift off");
+        require(!gauge::config_from_json(gauge::Json::object()).hud_position_locked, "legacy HUD placement defaults to unlocked");
+        const auto hud_placement = gauge::config_from_json(gauge::config_json(
+            gauge::config_from_json({{"hud_position_locked", true}, {"margin_x", 3000}, {"margin_y", 2100}})));
+        require(hud_placement.hud_position_locked && hud_placement.margin_x == 3000 && hud_placement.margin_y == 2100,
+            "HUD lock state and placement on large displays must persist");
         require(gauge::config_from_json(gauge::config_json(gauge::config_from_json({{"oled_protection", true}}))).oled_protection,
             "OLED preference must survive serialization");
         for (int origin : {0, 2, 50, 98, 100}) {

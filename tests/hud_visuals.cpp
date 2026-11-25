@@ -44,16 +44,17 @@ int wmain(int argc, wchar_t** argv) {
             s.obs_state = state; const auto items = gauge::hud_items(s, config);
             if (items.empty() || items.back().status != state) throw std::runtime_error("OBS must be last and carry state");
             const auto size = gauge::measure_hud_items(write.Get(), items, config);
-            if (size.width > 984) throw std::runtime_error("HUD preview clipped");
+            const float width = size.width + gauge::hud_position_badge_width;
+            if (width > 984) throw std::runtime_error("HUD preview clipped");
             target->SetTransform(D2D1::Matrix3x2F::Translation(20, y));
-            gauge::draw_hud_items(target.Get(), write.Get(), items, config, size.width, size.height);
+            gauge::draw_hud_items(target.Get(), write.Get(), items, config, width, size.height, row % 2 == 0);
             y += 60;
         }
         s.obs_state = "paused";
         const auto narrow_items = gauge::hud_items(s, config);
         target->SetTransform(D2D1::Matrix3x2F::Translation(20, y));
         const auto narrow_size = gauge::measure_hud_items(write.Get(), narrow_items, config);
-        gauge::draw_hud_items(target.Get(), write.Get(), narrow_items, config, 420, narrow_size.height);
+        gauge::draw_hud_items(target.Get(), write.Get(), narrow_items, config, 420, narrow_size.height, true);
         }
         check(target->EndDraw());
         ComPtr<IWICStream> stream; check(wic->CreateStream(&stream)); check(stream->InitializeFromFilename(argv[1], GENERIC_WRITE));

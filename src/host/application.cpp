@@ -12,6 +12,11 @@ namespace gauge {
 namespace {
 constexpr UINT tray_message = WM_APP + 1, action_message = WM_APP + 2;
 enum Action : UINT { open_settings = 100, toggle_hud, toggle_pause, edit_hud, reset_stats, export_data, quit_app, save_position, backup_now, open_saves };
+void set_hud_position(Config& config, POINT position) {
+    config.anchor = 1;
+    config.margin_x = position.x;
+    config.margin_y = position.y;
+}
 HICON make_icon() {
     HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
     HBITMAP bitmap = CreateCompatibleBitmap(screen, 32, 32), mask = CreateBitmap(32, 32, 1, 1, nullptr);
@@ -238,15 +243,17 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
             if (self->pending_exit_) self->quit_when_safe();
             self->refresh_saves();
             self->updater_.idle(self->sampler_.snapshot().target.pid != 0);
-            if (auto edit_result = self->overlay_->take_edit_result()) {
-                if (*edit_result) {
-                    auto config = self->config();
-                    config.anchor = 1;
-                    config.margin_x = self->overlay_->dragged_x();
-                    config.margin_y = self->overlay_->dragged_y();
-                    self->update_config(config);
-                }
+            auto position_change = self->overlay_->take_position_change();
+            const auto lock_change = self->overlay_->take_lock_change();
+            if (const auto edit_result = self->overlay_->take_edit_result()) {
+                if (*edit_result) position_change = self->overlay_->position();
                 self->overlay_->edit(false);
+            }
+            if (position_change || lock_change) {
+                auto config = self->config();
+                if (position_change) set_hud_position(config, *position_change);
+                if (lock_change) config.hud_position_locked = *lock_change;
+                self->update_config(config);
             }
             const auto snapshot = self->snapshot();
             const auto config = self->config();
@@ -284,7 +291,7 @@ LRESULT CALLBACK Application::procedure(HWND window, UINT message, WPARAM wparam
             case toggle_hud: config.enabled = !config.enabled; self->update_config(config); break;
             case toggle_pause: config.paused = !config.paused; self->update_config(config); break;
             case edit_hud:
-                if (self->overlay_->editing()) { config.anchor = 1; config.margin_x = self->overlay_->dragged_x(); config.margin_y = self->overlay_->dragged_y(); self->update_config(config); }
+                if (self->overlay_->editing()) { set_hud_position(config, self->overlay_->position()); self->update_config(config); }
                 self->overlay_->edit(!self->overlay_->editing()); break;
             case reset_stats: self->sampler_.reset_statistics(); break;
             case export_data: self->export_session(); break;

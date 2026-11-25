@@ -112,7 +112,8 @@ float Renderer::text_width(const std::wstring& text) {
 SIZE Renderer::measure(const Snapshot& s, const Config& config, UINT dpi) {
     prepare_format(static_cast<float>(config.font_size));
     const auto size = measure_hud_items(write_.Get(), hud_items(s, config), config);
-    return {static_cast<LONG>(std::ceil(size.width * dpi / 96)), static_cast<LONG>(std::ceil(size.height * dpi / 96))};
+    return {static_cast<LONG>(std::ceil((size.width + hud_position_badge_width) * dpi / 96)),
+        static_cast<LONG>(std::ceil(size.height * dpi / 96))};
 }
 void Renderer::resize(UINT width, UINT height) {
     if (width == width_ && height == height_) return;
@@ -125,7 +126,7 @@ void Renderer::resize(UINT width, UINT height) {
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap;
     check(context_->CreateBitmapFromDxgiSurface(surface.Get(), &properties, &bitmap)); context_->SetTarget(bitmap.Get());
 }
-void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE size) {
+void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE size, bool position_locked) {
     prepare_format(static_cast<float>(config.font_size));
     resize(static_cast<UINT>(size.cx), static_cast<UINT>(size.cy));
     context_->SetDpi(static_cast<float>(dpi), static_cast<float>(dpi));
@@ -133,7 +134,7 @@ void Renderer::render(const Snapshot& s, const Config& config, UINT dpi, SIZE si
     context_->BeginDraw(); context_->Clear(D2D1::ColorF(0, 0, 0, 0));
     Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> brush;
     check(context_->CreateSolidColorBrush(D2D1::ColorF(1.f, 1.f, 1.f), &brush));
-    draw_hud_items(context_.Get(), write_.Get(), hud_items(s, config), config, width, height);
+    draw_hud_items(context_.Get(), write_.Get(), hud_items(s, config), config, width, height, position_locked);
     if (config.graph && s.recent_frames.size() > 1) {
         brush->SetColor(theme::blue);
         const float spacing = (width - 12) / static_cast<float>(s.recent_frames.size() - 1);

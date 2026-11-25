@@ -84,6 +84,7 @@ struct Config {
     bool exclude_capture{true};
     bool oled_protection{};
     bool graph{};
+    bool hud_position_locked{};
     bool preview{};
     bool hide_on_blur{false};
     bool auto_target{true};

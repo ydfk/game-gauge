@@ -35,7 +35,7 @@ Layout layout(IDWriteFactory* write, const std::vector<HudItem>& items, const Co
     result.labels = format(write, size * .82f, DWRITE_FONT_WEIGHT_MEDIUM);
     result.values = format(write, size, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     result.primary = format(write, size * 1.12f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    result.row_height = std::ceil(size * 1.4f + 4);
+    result.row_height = hud_row_height(config);
     for (const auto& item : items) {
         if (result.groups.empty() || result.groups.back().name != item.group || !item.status.empty())
             result.groups.push_back({item.group, item.status});
@@ -52,13 +52,13 @@ Layout layout(IDWriteFactory* write, const std::vector<HudItem>& items, const Co
     return result;
 }
 void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Group& group,
-    const Layout& layout, float left, float width) {
-    if (width <= 0) return;
+    const Layout& layout, float left, float width, bool separator_before) {
+    if (width <= 4) return;
     const bool paused = group.status == "paused";
     const float height = layout.row_height;
     const auto status_color = paused ? theme::red : group.status == "recording" ? theme::mint : theme::muted;
     // 共用一块背景，用细分隔线保持读数分组。
-    if (left > 0) {
+    if (separator_before) {
         brush->SetColor(theme::tint(theme::lilac, .25f));
         const float separator = left - group_gap / 2;
         target->DrawLine(D2D1::Point2F(separator, 6), D2D1::Point2F(separator, height - 6), brush, 1);
@@ -94,13 +94,31 @@ void draw_group(ID2D1RenderTarget* target, ID2D1SolidColorBrush* brush, const Gr
     }
     target->PopAxisAlignedClip();
 }
+void draw_position_badge(ID2D1RenderTarget* target, IDWriteFactory* write, ID2D1SolidColorBrush* brush,
+    float width, float height, bool locked) {
+    if (width <= 8 || height <= 6) return;
+    const auto rect = D2D1::RectF(4, 3, width - 4, height - 3);
+    const auto pill = D2D1::RoundedRect(rect, 4, 4);
+    const auto color = locked ? theme::amber : theme::mint;
+    brush->SetColor(theme::panel);
+    target->FillRoundedRectangle(pill, brush);
+    brush->SetColor(theme::tint(color, .65f));
+    target->DrawRoundedRectangle(pill, brush);
+    const auto text_format = format(write, 12.f, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    text_format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    brush->SetColor(color);
+    target->DrawTextW(locked ? L"已锁定" : L"可拖动", 3, text_format.Get(), rect, brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+}
+}
+float hud_row_height(const Config& config) {
+    return std::ceil(static_cast<float>(config.font_size) * 1.4f + 4);
 }
 D2D1_SIZE_F measure_hud_items(IDWriteFactory* write, const std::vector<HudItem>& items, const Config& config) {
     const auto measured = layout(write, items, config);
     return D2D1::SizeF(measured.width, measured.row_height + (config.graph ? 40.f : 0));
 }
 void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std::vector<HudItem>& items,
-    const Config& config, float width, float height) {
+    const Config& config, float width, float height, std::optional<bool> position_locked) {
     const auto measured = layout(write, items, config);
     ComPtr<ID2D1SolidColorBrush> brush;
     const float alpha = static_cast<float>(config.opacity);
@@ -109,18 +127,22 @@ void draw_hud_items(ID2D1RenderTarget* target, IDWriteFactory* write, const std:
         theme::gradient(target, backdrop, theme::tint(theme::sidebar, alpha), theme::tint(theme::background, alpha), 7);
     check(target->CreateSolidColorBrush(theme::tint(theme::lilac, .18f * alpha), &brush));
     if (alpha > 0 && width > 1 && height > 1) target->DrawRoundedRectangle(D2D1::RoundedRect(backdrop, 7, 7), brush.Get());
+    const float badge_width = position_locked ? std::min(width, static_cast<float>(hud_position_badge_width)) : 0;
+    if (position_locked) draw_position_badge(target, write, brush.Get(), badge_width,
+        std::min(height, measured.row_height), *position_locked);
     const bool obs = !measured.groups.empty() && !measured.groups.back().status.empty();
     const auto count = measured.groups.size() - (obs ? 1 : 0);
-    const float obs_width = obs ? std::min(width, measured.groups.back().width) : 0;
+    const float obs_width = obs ? std::min(width - badge_width, measured.groups.back().width) : 0;
     // 窄窗口也为末尾 OBS 保留空间，防止暂停提醒被其他指标挤出窗口。
     const float metrics_right = obs ? width - obs_width - group_gap : width;
-    float x{};
+    float x = badge_width;
     for (size_t i = 0; i < count && x < metrics_right; ++i) {
         const auto& group = measured.groups[i];
-        if (group.width > metrics_right - x) break;
-        draw_group(target, brush.Get(), group, measured, x, group.width);
+        if (x + group.width > metrics_right + .01f) break;
+        draw_group(target, brush.Get(), group, measured, x, group.width, x > badge_width);
         x += group.width + group_gap;
     }
-    if (obs) draw_group(target, brush.Get(), measured.groups.back(), measured, width - obs_width, obs_width);
+    if (obs) draw_group(target, brush.Get(), measured.groups.back(), measured, width - obs_width, obs_width,
+        width - obs_width > badge_width);
 }
 }

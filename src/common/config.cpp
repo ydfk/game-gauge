@@ -29,6 +29,7 @@ Config config_from_json(const Json& json) {
     config.exclude_capture = json.value("exclude_capture", true);
     config.oled_protection = json.value("oled_protection", false);
     config.graph = json.value("graph", false);
+    config.hud_position_locked = json.value("hud_position_locked", false);
     config.preview = json.value("preview", false);
     config.hide_on_blur = json.value("hide_on_blur", false);
     config.auto_target = json.value("auto_target", true);
@@ -40,8 +41,8 @@ Config config_from_json(const Json& json) {
     config.font_size = std::clamp(config.font_size, 10.0, 32.0);
     config.opacity = std::clamp(config.opacity, 0.0, 1.0);
     config.anchor = std::clamp(json.value("anchor", 0), 0, 3);
-    config.margin_x = std::clamp(json.value("margin_x", 12), 0, 2000);
-    config.margin_y = std::clamp(json.value("margin_y", 0), 0, 2000);
+    config.margin_x = std::clamp(json.value("margin_x", 12), 0, 32767);
+    config.margin_y = std::clamp(json.value("margin_y", 0), 0, 32767);
     config.gpu_id = json.value("gpu_id", std::string{});
     if (json.contains("metrics")) {
         config.metrics.clear();
@@ -71,7 +72,8 @@ Json config_json(const Config& c) {
     return {{"version", 1}, {"show_obs", c.show_obs}, {"obs_pause_notice", c.obs_pause_notice},
         {"obs_screen_pause_notice", c.obs_screen_pause_notice},
         {"check_updates", c.check_updates}, {"auto_update", c.auto_update}, {"enabled", c.enabled}, {"paused", c.paused}, {"exclude_capture", c.exclude_capture},
-        {"oled_protection", c.oled_protection}, {"graph", c.graph}, {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
+        {"oled_protection", c.oled_protection}, {"graph", c.graph}, {"hud_position_locked", c.hud_position_locked},
+        {"preview", c.preview}, {"hide_on_blur", c.hide_on_blur}, {"auto_target", c.auto_target},
         {"target_pid", c.target_pid}, {"refresh_ms", c.refresh_ms}, {"font_size", c.font_size}, {"opacity", c.opacity},
         {"anchor", c.anchor}, {"margin_x", c.margin_x}, {"margin_y", c.margin_y}, {"gpu_id", c.gpu_id},
         {"metrics", c.metrics}, {"ignored_processes", c.ignored_processes}, {"known_games", c.known_games}};
